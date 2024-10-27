@@ -1,0 +1,4 @@
+*.env
+*.csv
+*.pyc
+tempCodeRunnerFile.py

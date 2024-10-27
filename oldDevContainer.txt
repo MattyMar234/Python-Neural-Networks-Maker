@@ -1,0 +1,33 @@
+{
+    "name": "Python-ImageNet",
+    "image": "mcr.microsoft.com/devcontainers/python:3.12",
+
+    //utilizzo image oppure un docker file
+    // "build": {
+    //   "dockerfile": "Dockerfile"
+    // },
+    // "settings": {
+    //   "terminal.integrated.shell.linux": "/bin/bash"
+    // },
+
+
+    "workspaceFolder": "/app",
+    "runArgs": ["--gpus", "all"],
+    "postCreateCommand": "pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt",
+
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/app,type=bind"
+    ],
+
+    "customizations" : {
+
+        // Configure properties specific to VS Code.
+        "vscode" : {
+            "settings": {},
+            "extensions" : [
+                "streetsidesoftware.code-spell-checker",
+                "ms-python.isort"
+            ]
+        }
+    }
+  }

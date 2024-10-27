@@ -1,0 +1,80 @@
+{
+	"version": 1,
+	"disable_existing_loggers": false,
+	"formatters": {
+		"detailed": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        },
+        "simple": {
+            "format": "%(levelname)s - %(message)s"
+        }
+	},
+
+    "loggers": {
+		"": {
+			"level": "INFO",
+			"handlers": [
+				"console",
+				"file"
+			]
+		},
+
+		"appData": {
+			"level": "INFO",
+			"propagate": false,
+			"handlers": [
+				"file"
+			]
+		},
+
+        "database": {
+            "level": "INFO",
+            "propagate": false,
+            "handlers": [
+                "database",
+                "console"
+            ]
+        },
+        
+        "training" : {
+            "level": "INFO",
+            "propagate": false,
+            "handlers": [
+                "training",
+                "console"
+            ]
+        }
+	},
+
+	"handlers": {
+		"console": {
+			"class": "logging.StreamHandler",
+			"level": "DEBUG",
+			"formatter": "simple",
+			"stream": "ext://sys.stdout"
+		},
+		"file": {
+			"class": "logging.handlers.RotatingFileHandler",
+			"level": "INFO",
+			"formatter": "simple",
+			"filename": "logs/app.log",
+			"encoding": "utf8"
+		},
+		"training": {
+			"class": "logging.handlers.RotatingFileHandler",
+			"level": "INFO",
+			"formatter": "simple",
+			"filename": "logs/training.log",
+			"encoding": "utf8"
+		},
+        "database" : {
+            "class": "logging.FileHandler",
+            "level": "INFO",
+            "formatter": "detailed",
+            "filename": "logs/database.log",
+			"encoding": "utf8"
+
+        }
+	}
+	
+}
