@@ -12,12 +12,28 @@ import os
 from PIL import Image
 import pandas as pd
 import ast
+from .DatasetBase import DatasetBase
 
 
 from abc import ABC, abstractmethod
 
+
+class Segmentation_Dataset_Base(DatasetBase):
+    
+    def __init__(self, imageSize: Tuple[int, int, int, int], classesCount: int, transform, oneHot: bool)-> None:
+        DatasetBase.__init__(self, classesCount=classesCount, transform=transform, oneHot=oneHot, caching = False)
+        
+        assert imageSize is not None
+        self.__img_Width = imageSize[0]
+        self.__img_Height = imageSize[1]
+        self.__img_Channels = imageSize[2]
+        self.__timeSequenze = imageSize[3]
+        
+
+
 class Row_Dataset_Base(ABC):
     pass
+
 class Image_Dataset_Base(ABC):
     
     def __init__(self, imageSize: Tuple[int, int, int], stackChannel: bool = True)-> None:

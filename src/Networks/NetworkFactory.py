@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 from enum import IntEnum, auto
-from Networks.NetworkComponents.NetworkModels import *
+from Networks.NetworkComponents.ConvolutionalsModels import *
 from Networks.TrainingModel import *
 
     

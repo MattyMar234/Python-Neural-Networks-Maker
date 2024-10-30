@@ -12,9 +12,20 @@ import numpy as np
 from Database.DatabaseConnection import PostgresDB
 from Database.DatabaseConnectionParametre import DatabaseParametre
 
+
+# class Segmentation_DatasetBase(Dataset):
+    
+#     def __init__(self, classesCount: tuple, transform: transforms = None, oneHot: bool = False) -> None:
+#         super().__init__()
+        
+#         self._transform: transforms = transform
+#         self._oneHot: bool = oneHot
+
+
+
 class DatasetBase(Dataset):
 
-    def __init__(self, classesCount: int, transform: transforms = None, oneHot: bool = False, device = None) -> None:
+    def __init__(self, classesCount: int, transform: transforms = None, oneHot: bool = False, device = None, caching:bool = True) -> None:
         super().__init__()
 
         self._transform: transforms = transform
@@ -22,6 +33,7 @@ class DatasetBase(Dataset):
         self._classesCount: int = classesCount
         self._device = device
         self._DatasetSize: int = None
+        self._caching = caching
 
 
     def __getitem__(self, idx: int) -> torch.Tensor:
@@ -39,6 +51,11 @@ class DatasetBase(Dataset):
             
         one_hot= np.zeros(self._classesCount, dtype=np.float32)
         one_hot[int(n)] = 1.0
+        return one_hot
+    
+    def _one_hot_encode_no_cache(self, labels_np):
+        labels_tensor = torch.tensor(labels_np, dtype=torch.long)
+        one_hot = torch.nn.functional.one_hot(labels_tensor, num_classes=self._classesCount)
         return one_hot
 
     @abstractmethod
@@ -67,7 +84,11 @@ class DatasetBase(Dataset):
             data, label = func(self, *args, **kwargs)
             
             if self._oneHot:
-                label_Tensor = torch.Tensor(self._one_hot_encode(label))
+                if self._caching:
+                    label_Tensor = torch.Tensor(self._one_hot_encode(label))
+                else:
+                    label_Tensor = self._one_hot_encode_no_cache(label)
+                #label_Tensor = torch.Tensor(self._one_hot_encode(label))
             else:
                 label_Tensor = torch.LongTensor([label])
                 

@@ -1,5 +1,5 @@
 {
-    "name": "Python-ImageNet",
+    "name": "Python-NNs_Maker",
     "image": "mcr.microsoft.com/devcontainers/python:3.12",
 
     //utilizzo image oppure un docker file

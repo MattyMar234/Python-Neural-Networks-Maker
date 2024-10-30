@@ -23,7 +23,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import DeviceStatsMonitor
 
 
-
+from pytorch_lightning.loggers import TensorBoardLogger
 
 
 
@@ -98,6 +98,7 @@ class NetworkManager:
         L.seed_everything(NetworkManager.__trainingRandomSeed, workers= workers > 0)
         
         #profiler="advanced"
+        logger = TensorBoardLogger("tb_logs", name="my_model")
         
         trainer = L.Trainer(
             accelerator="gpu", 
@@ -107,6 +108,9 @@ class NetworkManager:
             profiler="simple",
             default_root_dir= self._workingFolder,
             callbacks=[DeviceStatsMonitor()],
+            enable_checkpointing=True,
+            logger=logger
+            
             #num_sanity_val_steps=0
             
             # logger=pl.loggers.TensorBoardLogger(save_dir="logs/"),
@@ -118,6 +122,8 @@ class NetworkManager:
             val_dataloaders=test_dataloader,
             #ckpt_path=self._ckpt_file
         )
+        
+        
     
     def lightTestNetwork(self, testDataset: Dataset, batchSize: int = 1, workers: int = 0):
 

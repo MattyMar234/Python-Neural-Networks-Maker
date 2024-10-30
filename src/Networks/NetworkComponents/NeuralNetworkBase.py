@@ -88,3 +88,30 @@ class Conv2dBlock(nn.Module):
                 
     def forward(self, x):
         return self.convolutionBlock(x)
+    
+    
+
+class Multiple_Conv2D_Block(nn.Module):
+        def __init__(self, num_convs: int, in_channels: int, out_channels: int, kernel_size: int, stride: int, padding: int, bias: bool):
+            super().__init__()
+            
+            self.blockComponents = nn.Sequential()
+            
+            for _ in range(num_convs):  
+                self.blockComponents.append(
+                    nn.Conv2d(
+                        in_channels=in_channels, 
+                        out_channels=out_channels, 
+                        kernel_size=kernel_size, 
+                        stride=stride, 
+                        padding=padding, 
+                        bias=bias
+                    )
+                )
+                       
+                in_channels = out_channels
+                self.blockComponents.append(nn.BatchNorm2d(out_channels))
+                self.blockComponents.append(nn.ReLU(inplace=False))
+                
+        def forward(self, x):
+            return self.blockComponents(x)
