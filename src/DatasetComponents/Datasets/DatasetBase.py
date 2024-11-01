@@ -90,7 +90,7 @@ class DatasetBase(Dataset):
                     label_Tensor = self._one_hot_encode_no_cache(label)
                 #label_Tensor = torch.Tensor(self._one_hot_encode(label))
             else:
-                label_Tensor = torch.LongTensor([label])
+                label_Tensor = torch.LongTensor(label)
                 
             
             if self._transform:

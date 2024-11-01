@@ -2,7 +2,8 @@ import torch.nn as nn
 
 from enum import IntEnum, auto
 from Networks.NetworkComponents.ConvolutionalsModels import *
-from Networks.TrainingModel import *
+from Networks.NetworkComponents.ImageSegmentationModels import *
+from Networks.NetworkComponents.TrainingModel import *
 
     
 
@@ -10,10 +11,13 @@ from Networks.TrainingModel import *
 class NetworkFactory:
     
     class NetworkType(IntEnum):
-        LaNet5_ReLU = auto(),
-        LaNet5_TanH = auto(),
-        AlexNet = auto(),
-        VGG_19 = auto(),
+        LaNet5_ReLU = auto()
+        LaNet5_TanH = auto()
+        AlexNet = auto()
+        VGG_19 = auto()
+        UNET_2D = auto()
+        UNET_3D = auto()
+        
     
     def __init__(self) -> None:
         pass
@@ -37,6 +41,9 @@ class NetworkFactory:
             case NetworkFactory.NetworkType.VGG_19:
                 net = VGG_19(in_channel=in_channel*timeSequenze, num_classes=num_classes)
             
+            case NetworkFactory.NetworkType.UNET_2D:
+                net = UNET_2D(in_Channel=in_channel, out_channel=27)
+
             case _:
                 raise ValueError(f"Invalid network type: {networkType}")
             

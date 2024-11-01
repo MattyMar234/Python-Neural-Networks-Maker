@@ -3,18 +3,24 @@ from scipy.ndimage.filters import maximum_filter1d
 import torch
 import torch.nn as nn
 from torch.nn import Module, Sequential
+
+from Networks.NetworkComponents.TrainingModel import ImageSegmentation_TrainingBase
 from .NeuralNetworkBase import *
 
-class UNET_2D(LightModelBase):
-    def __init__(self, in_Channel:int = 1, out_channel: int = 1, features: tuple[int, int, int, int, int] = (64,128,256,512)) -> None:
-        super().__init__()
+class UNET_2D(ImageSegmentation_TrainingBase):
+    
+    def __init__(self, in_channel:int = 1, out_channel: int = 1, features: tuple[int, int, int, int] = (64,128,256,512)) -> None:
+        super().__init__(
+            in_channel= in_channel, 
+            out_channel=out_channel,
+            output_Classes=out_channel,
+            inputSize = [1, in_channel, 572,572],
+            lr=1e-3
+        )
         
-        assert len(features) == 4, "The number of features must be 5"
+        assert len(features) == 4, "The number of features must be 4"
         assert all(i > 0 for i in features), "The features must be positive integers"
         
-
-        self._in_Channel = in_Channel
-        self._out_Channel = out_channel
         self._features = features
         
         self._EncoderBlocks = nn.ModuleList()
@@ -27,7 +33,7 @@ class UNET_2D(LightModelBase):
             self._EncoderBlocks.append(
                 Multiple_Conv2D_Block(
                     num_convs=2,
-                    in_channels=in_Channel, 
+                    in_channels=in_channel, 
                     out_channels=feature, 
                     kernel_size=3, 
                     stride=1, 
@@ -35,7 +41,7 @@ class UNET_2D(LightModelBase):
                     bias=False
                 )
             )
-            in_Channel = feature
+            in_channel = feature
             
         self._Bottleneck.append(
             Multiple_Conv2D_Block(
@@ -80,6 +86,7 @@ class UNET_2D(LightModelBase):
         )
     
     def forward(self, x) -> torch.Tensor | None :
+        
         skip_connections = []
 
         for encoder_block in self._EncoderBlocks:

@@ -16,6 +16,7 @@ class Munich480(Segmentation_Dataset_Base):
     _TRAIN_TILEIDS_FOLDER = os.path.join("tileids", "train_folders.txt")
     _TEST_TILEIDS_FOLDER = os.path.join("tileids", "test_folders.txt")
     
+    _semaphore = asyncio.Semaphore(3)
     
     class DataType(Enum):
         TRAINING = auto()
@@ -31,7 +32,7 @@ class Munich480(Segmentation_Dataset_Base):
     
     
     def __init__(self, folderPath:str | None, mode: DataType, year: Year, transforms):
-        Segmentation_Dataset_Base.__init__(self, imageSize = (48,48,4,30), classesCount = 27, transform=transforms, oneHot = True)
+        Segmentation_Dataset_Base.__init__(self, imageSize = (48,48,4,30), classesCount = 27, transform=transforms, oneHot = False)
         
         self._folderPath:str | None = folderPath
         self._years: Munich480.Year = year
@@ -68,23 +69,26 @@ class Munich480(Segmentation_Dataset_Base):
     #@_normalize_dif_data
     async def _load_dif_file(self, filePath:str, normalize: bool = True) -> np.array:
         #print(f"Loading: {filePath}")
-        
-        with rasterio.open(filePath) as src:
-            data = src.read()
-            
-            if normalize:
-                return await self._normalize_dif_data(data)
-            return data
-            #return await self._normalize_dif_data(data)
+        async with Munich480._semaphore:
+            with rasterio.open(filePath) as src:
+                data = src.read()
+                
+                if normalize:
+                    return await self._normalize_dif_data(data)
+                return data
+                #return await self._normalize_dif_data(data)
         
     async def _load_y(self, folder:str):
         return await self._load_dif_file(filePath=os.path.join(folder, "y.tif"), normalize = False)
         
         
-    async def _load_year_sequenze(self, year: str, number: str):
+    async def _load_year_sequenze(self, year: str, number: str, use_coroutines: bool = True):
         sequenzeFolder = os.path.join(self._folderPath, year, number)
         tasks = []
         count = 0
+        
+        semaphore = asyncio.Semaphore(value=5)
+        
         
         for file in os.listdir(sequenzeFolder):
             if file.endswith(("_10m.tif")):
@@ -105,16 +109,30 @@ class Munich480(Segmentation_Dataset_Base):
                     count += 1
                 
                 
-        tasks.append(self._load_y(sequenzeFolder))
-              
-                #self._load_dif_file(filePath=os.path.join(sequenzeFolder, file))
-        # Wait for all tasks to complete
-        data_arrays = await asyncio.gather(*tasks)
         
-        # Concatenate all data arrays along the last axis
-        combined_data = np.concatenate(data_arrays[:-1], axis=Munich480.__stack_axis)
-        label = data_arrays[-1]
-        return combined_data, label
+              
+
+        if use_coroutines:
+            tasks.append(self._load_y(sequenzeFolder))
+            data_arrays = await asyncio.gather(*tasks)
+            # Concatenate all data arrays along the last axis
+            combined_data = np.concatenate(data_arrays[:-1], axis=Munich480.__stack_axis)
+            label = data_arrays[-1]
+            return combined_data, label
+        else:
+            combined_data = None  # Inizializza a None
+            for i, task in enumerate(tasks):
+                npData = task()  # Assicurati che ogni task restituisca un array NumPy
+                if combined_data is None:
+                    combined_data = npData  # Primo array, inizializza combined_data
+                else:
+                    combined_data = np.concatenate((combined_data, npData), axis=Munich480.__stack_axis)  # Concatenate i dati
+            
+            label = self._load_y(sequenzeFolder)  # Chiama _load_y senza await
+            print(combined_data.shape, label.shape)
+            return combined_data, label
+        
+        
                 
     def _getSize(self) -> int:
         return np.size(self._dataSequenze)        
@@ -138,7 +156,11 @@ class Munich480(Segmentation_Dataset_Base):
         idx = self._mapIndex(idx)
  
         try:
-            return asyncio.run(self._load_data(idx))
+            x, y = asyncio.run(self._load_data(idx))
+            x = np.transpose(x, (1, 2, 0))
+            y = np.squeeze(y, axis=0)
+            return x, y
+            
         except Exception as e:
             print(f"Error loading data: {e}")
             return np.zeros(1, dtype=np.uint8)

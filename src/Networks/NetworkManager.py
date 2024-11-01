@@ -1,16 +1,19 @@
+import argparse
 from dataclasses import dataclass
 from torchvision import transforms
 from torch import nn
-import lightning as L
 import torch
 from torchmetrics import Metric
 import torch.optim.lr_scheduler as lr_scheduler
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
-from torch.utils.data.dataloader import default_collate
-from torchinfo import summary #conda install conda-forge::torchinfo -y
+from torchinfo import summary
 
-from .TrainingModel import *
+import pytorch_lightning as pl
+from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
+from pytorch_lightning.callbacks import ModelCheckpoint, DeviceStatsMonitor
+
+from .NetworkComponents.TrainingModel import *
 
 from PIL import Image
 import logging
@@ -19,11 +22,8 @@ import os
 import tqdm
 import numpy as np
 import shutil
-from pytorch_lightning.loggers import TensorBoardLogger
-from lightning.pytorch.callbacks import DeviceStatsMonitor
 
 
-from pytorch_lightning.loggers import TensorBoardLogger
 
 
 
@@ -31,115 +31,151 @@ class NetworkManager:
 
     __trainingRandomSeed: int = 42
 
-    def __init__(self, device: torch.device, model: nn.Module, workingFolder: str, ModelWeights_Output_File:str = None, ModelWeights_Input_File: str = None, ckpt_file: str = None):
+    def __init__(self, device: torch.device, model: L.LightningModule, workingFolder: str | None = None, args: argparse.Namespace | None = None):
         
-        self.__device: torch.device = device
-        self.__model:nn.Module = model
-        self._workingFolder:str = workingFolder
+        assert model != None, "Model cannot be None"
         
-        if ModelWeights_Input_File == None or ModelWeights_Input_File == "":
-            self.__ModelWeights_Input_File:str | None = None
+        self._device: torch.device = device
+        self._model:L.LightningModule = model
+        self._args: argparse.Namespace | None = args
+        
+        if workingFolder == None or workingFolder == "":
+            self._workingFolder = os.path.join(os.getcwd(), model.__class__.__name__)
         else:
-            self.__ModelWeights_Input_File:str = os.path.join(workingFolder, ModelWeights_Input_File)
+            self._workingFolder = os.path.join(workingFolder, model.__class__.__name__)
         
-        self.__ModelWeights_Output_File:str = os.path.join(workingFolder, ModelWeights_Output_File)
-        self._ckpt_file: str = os.path.join(workingFolder, ckpt_file)
-        
-        #self.__useLightModule: bool = useLightModule
-        #self.__model_input_size = model_input_size
-        
-        if not os.path.exists(workingFolder):
-            os.makedirs(workingFolder)
+        if not os.path.exists(self._workingFolder):
+            os.makedirs(self._workingFolder)
             
-        # with open(self._ckpt_file, 'w') as f:
-        #     pass
         
-        self.__model.to(self.__device)
+        self._model.to(self._device)
         
-        if self.__ModelWeights_Input_File != None and self.__ModelWeights_Input_File != "":
-            self._importWeights(path=self.__ModelWeights_Input_File)
+        
     
     @property
     def parameters(self):
-        return self.__model.parameters()
+        return self._model.parameters()
     
     @property
     def modelInfo(self):
-        return self.__model.__str__()
+        return self._model.__str__()
+    
+    
+    def load_checkpoint(self, checkpoint_Path:str) -> None:
+        self._model.load_from_checkpoint(checkpoint_Path)
     
    
-    def makeSummary(self) -> str:
-        colName = ['input_size', 'output_size', 'num_params', 'trainable']
-        temp = summary(self.__model, input_size=self.__model.requestedInputSize(), col_width=20, col_names=colName, row_settings=['var_names'], verbose=0,depth=20)
-        return temp.__repr__()
+    
     
 
     def _exportWeights(self, path:str):
-        torch.save(self.__model.state_dict(), path)
+        torch.save(self._model.state_dict(), path)
         logging.info(f'Modello salvato in {path}')
     
 
     def _importWeights(self, path:str):
         if os.path.isfile(path):
-            self.__model.load_state_dict(torch.load(path))
+            self._model.load_state_dict(torch.load(path))
             logging.info(f'Modello {path} importato con successo')
         else:
             logging.error(f'File {path} non trovato')
             raise FileNotFoundError(f'File {path} non trovato')
 
 
-    def lightTrainNetwork(self, traiableModel: TrainableModel, trainingDataset: Dataset, testDataset: Dataset,
-                          epochs: int = 1, batchSize: int = 1, workers: int = 0):
+    def lightTrainNetwork(self, trainingDataset: Dataset, testDataset: Dataset, **kwargs):
         
         
-        train_dataloader = DataLoader(dataset = trainingDataset, batch_size = batchSize, shuffle = True, num_workers = workers, worker_init_fn=trainingDataset.worker_init_fn)
-        test_dataloader  = DataLoader(dataset = testDataset,     batch_size = batchSize, shuffle = False, num_workers = workers, worker_init_fn=trainingDataset.worker_init_fn)
+        train_dataloader = DataLoader(
+            dataset = trainingDataset, 
+            batch_size = self._args.batch_size, 
+            shuffle = True, 
+            num_workers = self._args.workers, 
+            #worker_init_fn=trainingDataset.worker_init_fn,
+            pin_memory=True,
+            persistent_workers=True
+        )
         
-        L.seed_everything(NetworkManager.__trainingRandomSeed, workers= workers > 0)
+        validation_dataloader = DataLoader(
+            dataset = testDataset,     
+            batch_size = self._args.batch_size, 
+            shuffle = False, 
+            num_workers = self._args.workers, 
+            #worker_init_fn=trainingDataset.worker_init_fn,
+            pin_memory=True,
+            persistent_workers=True
+        )
         
-        #profiler="advanced"
-        logger = TensorBoardLogger("tb_logs", name="my_model")
+        pl.seed_everything(NetworkManager.__trainingRandomSeed, workers= self._args.workers > 0)
         
-        trainer = L.Trainer(
+        
+        
+        tensorBoard_logger = TensorBoardLogger(save_dir= self._workingFolder, name="TensorBoard_logs")
+        CSV_logger = CSVLogger(save_dir= self._workingFolder, name="CSV_logs")
+        
+        
+        checkpoint_callback = ModelCheckpoint(
+            monitor=TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME,  # La metrica da monitorare
+            dirpath=os.path.join(self._workingFolder, 'checkpoints'),  # Sottocartella per i checkpoint
+            filename='{epoch}-{' + f'{TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME}'+':.8f}',  # Nome del file
+            save_top_k=3,  # Salva i migliori 3 checkpoint
+            mode='min',  # Se la metrica deve essere minimizzata
+            every_n_epochs=1,
+            save_last=True,
+        )
+        
+        
+        trainer = pl.Trainer(
             accelerator="gpu", 
             devices=[0],
-            max_epochs=epochs,
+            max_epochs=self._args.epochs,
             min_epochs=1, 
-            profiler="simple",
-            default_root_dir= self._workingFolder,
-            callbacks=[DeviceStatsMonitor()],
+            #profiler="simple", #profiler="advanced"
+            #default_root_dir= self._workingFolder,
             enable_checkpointing=True,
-            logger=logger
+            logger=[CSV_logger, tensorBoard_logger],
             
             #num_sanity_val_steps=0
             
             # logger=pl.loggers.TensorBoardLogger(save_dir="logs/"),
-            # callbacks=[pl.callbacks.ModelCheckpoint(dirpath="checkpoints/", monitor="train_loss", mode="min", save_top_k=1)]
+            callbacks=[
+                checkpoint_callback, 
+                #DeviceStatsMonitor()
+            ]
         )
+        
+        if self._args.compile == 1:
+            self._model = torch.compile(self._model)
+        
+        
         trainer.fit(
-            model=traiableModel,#torch.compile(traiableModel), 
+            model=self._model,#torch.compile(traiableModel), 
             train_dataloaders=train_dataloader,
-            val_dataloaders=test_dataloader,
-            #ckpt_path=self._ckpt_file
+            val_dataloaders=validation_dataloader,
+            ckpt_path=self._args.ckpt_path
         )
         
         
     
-    def lightTestNetwork(self, testDataset: Dataset, batchSize: int = 1, workers: int = 0):
+    def lightTestNetwork(self, testDataset: Dataset):
 
-        test_dataloader  = DataLoader(dataset = testDataset, batch_size = batchSize, shuffle = True, num_workers = workers, worker_init_fn=testDataset.worker_init_fn)
+        
 
-        trainer = L.Trainer(
-            accelerator="gpu",
-            devices=[0],
-            max_epochs=1,
-            min_epochs=1,
+        test_dataloader = DataLoader(
+            dataset = testDataset,     
+            batch_size = self._args.batch_size, 
+            shuffle = False, 
+            num_workers = self._args.workers, 
+            #worker_init_fn=trainingDataset.worker_init_fn,
+            pin_memory=True,
+            persistent_workers=True
         )
-        trainer.test(
-            model=self.__model,
-            dataloaders=test_dataloader,
-            ckpt_path=self._ckpt_file
-        )
+
+        
+        trainer = pl.Trainer(accelerator="gpu", devices=[0])
+        predictions = trainer.predict(model=self._model, dataloaders=test_dataloader, ckpt_path=self._args.ckpt_path)
+    
+        print(predictions)
+        
             
 
     def trainNetwork(self, trainingDataset: Dataset, testDataset: Dataset, epochs: int = 1, batchSize: int = 1, workers: int = 0, lr: float = 1e-4, gamma: float = 0.99, startFactor: int = 1.0, endFactor: int = 1.0 ,logger = None, stepsForCheckpoint: int = -1, checkpointPath: str = None) -> np.array:
@@ -164,7 +200,7 @@ class NetworkManager:
 
         torch.manual_seed(NetworkManager.__trainingRandomSeed)
         
-        optimizer = torch.optim.Adam(self.__model.parameters(), lr=lr)
+        optimizer = torch.optim.Adam(self._model.parameters(), lr=lr)
         criterion = torch.nn.CrossEntropyLoss()
         #scheduler = lr_scheduler.LinearLR(optimizer, start_factor=startFactor, end_factor=endFactor, total_iters=epochs)
         
@@ -180,9 +216,9 @@ class NetworkManager:
         logger.info(f"Optimizer: {optimizer}")
         logger.info(f"Scheduler: {scheduler}")
         logger.info(f"Criterion: {criterion}")
-        logger.info(f"Device: {self.__device}")
+        logger.info(f"Device: {self._device}")
         logger.info(f"Random Seed: {NetworkManager.__trainingRandomSeed}")
-        logger.info(f"Model Name: {self.__model.__class__.__name__}")
+        logger.info(f"Model Name: {self._model.__class__.__name__}")
         logger.info(f"Model:\n{self.makeSummary()}")
         logger.info(f"{'-'*40}{'-'*40}")
 
@@ -221,7 +257,7 @@ class NetworkManager:
             # trainingDataset.closeAllConnections()
             
             #mposto il modella in modalità di addestramento
-            self.__model.train()  
+            self._model.train()  
             running_loss:float = 0.0
             
             
@@ -231,11 +267,11 @@ class NetworkManager:
                 batchBar.update()
                 batchBar.refresh()
 
-                data = data.to(self.__device)
-                labels = labels.to(self.__device)
+                data = data.to(self._device)
+                labels = labels.to(self._device)
                 
                 optimizer.zero_grad()                       # Azzerare i gradienti
-                output = self.__model.forward(data)         # Forward pass
+                output = self._model.forward(data)         # Forward pass
                 loss = criterion(output, labels)            # Calcolo della perdita
                 
                 # Backpropagation e aggiornamento dei pesi
@@ -261,8 +297,8 @@ class NetworkManager:
                 convBar.refresh()
 
 
-                data = data.to(self.__device)
-                labels = labels.to(self.__device)
+                data = data.to(self._device)
+                labels = labels.to(self._device)
                 labels = torch.argmax(labels, dim=1)
 
                 outputs = self.predict(data, returnAsTensor= True)
@@ -298,8 +334,8 @@ class NetworkManager:
     def predict(self, InputTensor:torch.Tensor, returnAsTensor = False):
         
         with torch.no_grad():
-            self.__model.eval()
-            output = self.__model(InputTensor.to(self.__device))
+            self._model.eval()
+            output = self._model(InputTensor.to(self._device))
 
         if returnAsTensor:
             return output

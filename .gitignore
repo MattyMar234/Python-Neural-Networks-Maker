@@ -1,6 +1,7 @@
 *.env
 *.csv
 *.pyc
+*.ckpt
 tempCodeRunnerFile.py
 Data/
 Models/

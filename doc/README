@@ -1,0 +1,2 @@
+To launch the tensorboard dashboard run the following command on the commandline.
+tensorboard --logdir=lightning_logs/

@@ -2,7 +2,7 @@ import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
-import lightning as L
+import pytorch_lightning as pl
 from torchinfo import summary
 
 from abc import ABC, abstractmethod
@@ -38,18 +38,31 @@ class ModelBase(nn.Module):
         pass
     
     
-class LightModelBase(L.LightningModule):
-    def __init__(self, *args, **kwargs) -> None:
-        super(*args, **kwargs).__init__()
+class LightModelBase(pl.LightningModule):
+    def __init__(self, **kwargs) -> None:
+        super().__init__()
+        
+        self._in_Channel:int = kwargs['in_channel']
+        self._out_channel: int = kwargs['out_channel']
+        self._output_Classes: int = kwargs['output_Classes']
+        self._inputSize: list = kwargs['inputSize']
+        
+        assert self._in_Channel > 0, "Input channel must be greater than 0"
+        assert self._out_channel > 0, "Output channel must be greater than 0"
+        assert self._output_Classes > 0, "Output classes must be greater than 0"
+
+        #self.__net = kwargs['net']
+        
+        #print(self.__net)
+        #self.save_hyperparameters()
+        
         
     def makeSummary(self, depth: int = 4) -> str:
         colName = ['input_size', 'output_size', 'num_params', 'trainable']
-        temp = summary(self, input_size=self.requestedInputSize(), col_width=20, col_names=colName, row_settings=['var_names'], verbose=0, depth=depth)
+        temp = summary(self, input_size=self._inputSize, col_width=20, col_names=colName, row_settings=['var_names'], verbose=0, depth=depth)
         return temp.__repr__()
         
-    @abstractmethod
-    def requestedInputSize(self) -> list[int]:
-        pass
+    
 
 
 
