@@ -17,7 +17,8 @@
     "postCreateCommand": "pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt",
 
     "mounts": [
-        "source=${localWorkspaceFolder},target=/app,type=bind"
+        "source=${localWorkspaceFolder},target=/app,type=bind",
+        "source=//c/Users/Utente/Desktop/Datasets,target=/dataset,type=bind"
     ],
 
     "remoteEnv": {

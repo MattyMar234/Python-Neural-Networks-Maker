@@ -5,7 +5,10 @@ import numpy as np
 from Database.DatabaseConnection import PostgresDB
 from Database.DatabaseConnectionParametre import DatabaseParametre
 from Database.Tables import ImageTable, TableBase
-from Dataset.DatasetBase import DatasetBase, PostgresDB_Dataset
+
+from DatasetComponents.Datasets.DatasetBase import DatasetBase
+from DatasetComponents.Datasets.DatasetBase import PostgresDB_Dataset
+
 import torch
 import time
 import os
@@ -20,14 +23,18 @@ from abc import ABC, abstractmethod
 
 class Segmentation_Dataset_Base(DatasetBase):
     
-    def __init__(self, imageSize: Tuple[int, int, int, int], classesCount: int, transform, oneHot: bool)-> None:
-        DatasetBase.__init__(self, classesCount=classesCount, transform=transform, oneHot=oneHot, caching = False)
+    def __init__(self, imageSize: Tuple[int, int, int, int] | Tuple[int, int, int], classesCount: int, x_transform, y_transform, oneHot: bool)-> None:
+        DatasetBase.__init__(self, classesCount=classesCount, x_transform=x_transform, y_transform = y_transform, oneHot=oneHot, caching = False)
         
         assert imageSize is not None
         self.__img_Width = imageSize[0]
         self.__img_Height = imageSize[1]
         self.__img_Channels = imageSize[2]
-        self.__timeSequenze = imageSize[3]
+        
+        if len(imageSize) == 4:
+            self.__img_TimeSequenze = imageSize[3]
+    
+        
         
 
 

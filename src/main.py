@@ -6,8 +6,7 @@ from torchvision import transforms
 import psycopg2
 import os
 
-from Dataset.ImageDataset import *
-from Dataset.munich480 import *
+from DatasetComponents.DataModule.Munich480_DataModule import *
 
 from Database.DatabaseConnection import PostgresDB
 from Database.DatabaseConnectionParametre import DatabaseParametre
@@ -60,6 +59,17 @@ def main(args: argparse.Namespace | None) -> None:
         trade-off precision for performance. 
         For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision"""
      
+    datamodule = Munich480_DataModule(
+        datasetFolder = "/dataset/munich480",
+        batch_size=args.batch_size,
+        num_workers=args.workers,
+        year= Munich480.Year.Y2016 | Munich480.Year.Y2017,
+        distance= Munich480.Distance.m10 | Munich480.Distance.m20 | Munich480.Distance.m60,
+    ) 
+    
+    datamodule.setup()
+    train = datamodule.train_dataloader()
+    
     
     # UNET, trainer = NetworkFactory.makeNetwork(
     #     trainingModel = TrainModel_Type.ImageClassification,
@@ -68,8 +78,12 @@ def main(args: argparse.Namespace | None) -> None:
     #     num_classes=27
     # )
     
-    UNET_model = UNET_2D(in_channel=144, out_channel=27)
+    print(datamodule.number_of_channels())
     
+    UNET_2D_Model: ModelBase = UNET_2D(in_channel=datamodule.number_of_channels(), out_channel=datamodule.number_of_classes(), inputSize= datamodule.input_size())
+    
+    print(UNET_2D_Model.makeSummary())
+    return
 
 
     databaseParametre = DatabaseParametre(

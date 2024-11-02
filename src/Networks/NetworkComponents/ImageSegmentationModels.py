@@ -9,12 +9,15 @@ from .NeuralNetworkBase import *
 
 class UNET_2D(ImageSegmentation_TrainingBase):
     
-    def __init__(self, in_channel:int = 1, out_channel: int = 1, features: tuple[int, int, int, int] = (64,128,256,512)) -> None:
+    def __init__(self, in_channel:int = 1, out_channel: int = 1, features: tuple[int, int, int, int] = (64,128,256,512), inputSize: list | None = None) -> None:
+        
+        inputSize = [1, in_channel, 572,572] if inputSize is None else inputSize
+        
         super().__init__(
             in_channel= in_channel, 
             out_channel=out_channel,
             output_Classes=out_channel,
-            inputSize = [1, in_channel, 572,572],
+            inputSize = inputSize,
             lr=1e-3
         )
         

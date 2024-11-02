@@ -25,10 +25,11 @@ from Database.DatabaseConnectionParametre import DatabaseParametre
 
 class DatasetBase(Dataset):
 
-    def __init__(self, classesCount: int, transform: transforms = None, oneHot: bool = False, device = None, caching:bool = True) -> None:
+    def __init__(self, classesCount: int, x_transform: transforms = None, y_transform: transforms = None, oneHot: bool = False, device = None, caching:bool = True) -> None:
         super().__init__()
 
-        self._transform: transforms = transform
+        self._x_transform: transforms = x_transform
+        self._y_transform: transforms = y_transform
         self._oneHot: bool = oneHot
         self._classesCount: int = classesCount
         self._device = device
@@ -37,7 +38,8 @@ class DatasetBase(Dataset):
 
 
     def __getitem__(self, idx: int) -> torch.Tensor:
-        return self._getItem(idx)
+        item = self._getItem(idx)
+        return item 
     
     def __len__(self) -> int:
         if self._DatasetSize is None:
@@ -45,16 +47,19 @@ class DatasetBase(Dataset):
         return self._DatasetSize
     
     @lru_cache(maxsize=None)  # Decoratore per memorizzare i risultati calcolati
-    def _one_hot_encode(self, n):
-        if n > self._classesCount:
-            raise IndexError("Index out of range")
+    def _one_hot_encode(self, labels: any):
+        # if n > self._classesCount:
+        #     raise IndexError("Index out of range")
             
-        one_hot= np.zeros(self._classesCount, dtype=np.float32)
-        one_hot[int(n)] = 1.0
+        # one_hot= np.zeros(self._classesCount, dtype=np.float32)
+        # one_hot[int(n)] = 1.0
+        # return one_hot
+        labels_tensor = torch.tensor(labels, dtype=torch.long)
+        one_hot = torch.nn.functional.one_hot(labels_tensor, num_classes=self._classesCount)
         return one_hot
     
-    def _one_hot_encode_no_cache(self, labels_np):
-        labels_tensor = torch.tensor(labels_np, dtype=torch.long)
+    def _one_hot_encode_no_cache(self, labels: any):
+        labels_tensor = torch.tensor(labels, dtype=torch.long)
         one_hot = torch.nn.functional.one_hot(labels_tensor, num_classes=self._classesCount)
         return one_hot
 
@@ -74,36 +79,40 @@ class DatasetBase(Dataset):
     def _FormatResult(func):
         def wrapper(self, *args, **kwargs):
             
-            data: any = None
-            label:int = None
+            data:  np.array | torch.Tensor | None = None
+            label: np.array | torch.Tensor |int | None = None
             
             data_Tensor: torch.Tensor = None
             label_Tensor: torch.Tensor = None
             
-            
+        
             data, label = func(self, *args, **kwargs)
+            
+            
+            if type(data) == torch.Tensor:
+                data = data.numpy()
+                
+            if type(label) == torch.Tensor:
+                label = label.numpy()
+            
+            if self._y_transform:
+                label_Tensor = self._y_transform(label)
+                label_Tensor = label_Tensor.long()
+            else:
+                label_Tensor = torch.Tensor(label)
             
             if self._oneHot:
                 if self._caching:
                     label_Tensor = torch.Tensor(self._one_hot_encode(label))
                 else:
                     label_Tensor = self._one_hot_encode_no_cache(label)
-                #label_Tensor = torch.Tensor(self._one_hot_encode(label))
-            else:
-                label_Tensor = torch.LongTensor(label)
-                
+   
             
-            if self._transform:
-                data_Tensor = self._transform(data)
-        
-                if self._device is not None:
-                    data_Tensor = data_Tensor.to(self._device)
+            if self._x_transform:
+                data_Tensor = self._x_transform(data)
             else:
+                data_Tensor = torch.Tensor(data)
                 
-                if self._device is not None:
-                    data_Tensor = torch.Tensor(data, device=self._device)
-                else:
-                    data_Tensor = torch.Tensor(data)
             
             return data_Tensor, label_Tensor
         return wrapper
@@ -117,7 +126,7 @@ class PostgresDB_Dataset(DatasetBase):
     
 
     def __init__(self, connectionParametre: DatabaseParametre, classesCount: int, transform: transforms, oneHot: bool) -> None:
-        super().__init__(classesCount, transform, oneHot)
+        super().__init__(classesCount, transform, None, oneHot)
         
         assert (connectionParametre is not None) 
         assert (type(connectionParametre) is DatabaseParametre)

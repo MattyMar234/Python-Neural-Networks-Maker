@@ -1,3 +1,4 @@
+from ast import Tuple
 import opendatasets
 import pytorch_lightning as pl
 import torch
@@ -24,6 +25,18 @@ class DataModuleBase(pl.LightningDataModule):
             os.makedirs(folder)
             
         opendatasets.download(dataset_id_or_url=url, data_dir=folder)
+      
+    @abstractmethod  
+    def number_of_classes(self) -> int:
+        ...
+        
+    @abstractmethod  
+    def input_size(self) -> list[int]:
+        ...
+    
+    @abstractmethod 
+    def number_of_channels(self) -> int:
+        ...
 
     @abstractmethod
     def prepare_data(self) -> None:
