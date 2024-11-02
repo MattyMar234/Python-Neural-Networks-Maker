@@ -3,9 +3,12 @@ import pytorch_lightning as pl
 import torch
 import opendatasets
 
+from DatasetComponents.Datasets.munich480 import *
+
 from .DataModuleBase import *
+from torch.utils.data import DataLoader
 #from DatasetComponents.Datasets.munich480 import *
-from src.DatasetComponents.Datasets.munich480 import Munich480
+
 
 class Munich480_DataModule(DataModuleBase):
     
@@ -14,21 +17,41 @@ class Munich480_DataModule(DataModuleBase):
     def __init__(self, datasetFolder:str, download: bool = False, batch_size: int = 1, num_workers: int  = 1):
         super().__init__(datasetFolder, batch_size, num_workers)
 
-        t: Munich480 = Munich480()
+        self._download = download
+        self._TRAIN: Munich480 | None = None
+        self._VAL: Munich480 | None = None
+        self._TEST: Munich480 | None = None
+        
+        
+        self._training_trasforms = transforms.Compose([
+            # transforms.RandomHorizontalFlip(),
+            # transforms.RandomVerticalFlip(),
+            #transforms.RandomRotation(degrees=15, fill=(255, 255, 255)),
+            #transforms.Resize((572, 572)),
+            transforms.ToTensor()
+        ])
+        
+        self._test_trasforms = transforms.Compose([
+            #transforms.Resize((572, 572)),
+            transforms.ToTensor()
+        ])
+        
 
     def prepare_data(self) -> None:
         if self._download:
             self._DownloadDataset(url= Munich480_DataModule._KAGGLE_DATASET_URL, folder= self._datasetFolder)
     
 
-    def setup(self, stage=None):
-        pass
+    def setup(self, stage=None) -> None:
+        self._TRAIN = Munich480(self._datasetFolder, mode= Munich480.DataType.TRAINING, year= Munich480.Year.Y2016, transforms=self._training_trasforms)
+        self._VAL   = Munich480(self._datasetFolder, mode= Munich480.DataType.VALIDATION, year= Munich480.Year.Y2016, transforms=self._test_trasforms)
+        self._TEST  = Munich480(self._datasetFolder, mode= Munich480.DataType.TEST, year= Munich480.Year.Y2016, transforms=self._test_trasforms)
 
-    def train_dataloader(self):
-        pass
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(self._TRAIN, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=True, pin_memory=True, persistent_workers=True, drop_last=True)
 
-    def val_dataloader(self):
-        pass
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(self._VAL, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=True, persistent_workers=True, drop_last=True)
 
-    def test_dataloader(self):
-        pass
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=True, persistent_workers=True, drop_last=True)

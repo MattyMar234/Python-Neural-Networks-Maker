@@ -13,6 +13,7 @@ from Database.DatabaseConnection import PostgresDB
 from Database.DatabaseConnectionParametre import DatabaseParametre
 from Database.Tables import *
 
+from DatasetComponents.Datasets.munich480 import Munich480
 from Networks.NetworkFactory import *
 from Networks.NetworkManager import *
 from Networks.NetworkComponents.TrainingModel import *
