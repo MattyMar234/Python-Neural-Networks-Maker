@@ -39,7 +39,7 @@ class DatasetBase(Dataset):
 
     def __getitem__(self, idx: int) -> torch.Tensor:
         item = self._getItem(idx)
-        return item 
+        return self.adjustData(item) 
     
     def __len__(self) -> int:
         if self._DatasetSize is None:
@@ -74,6 +74,10 @@ class DatasetBase(Dataset):
     @abstractmethod
     def worker_init_fn(self, worker_id: int) -> None:
         pass
+    
+    @abstractmethod
+    def adjustData(self, sample: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+        return sample
     
     @staticmethod
     def _FormatResult(func):

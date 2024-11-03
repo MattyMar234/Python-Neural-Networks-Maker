@@ -30,7 +30,7 @@ class Munich480(Segmentation_Dataset_Base):
     _TEST_TILEIDS_FOLDER = os.path.join("tileids", "test_folders.txt")
     _CLASSES_FILE = "classes.txt"
     
-    _semaphore = asyncio.Semaphore(3)
+    _semaphore = asyncio.Semaphore(10)
     _classLock = Lock()
     _stack_axis: int = 1
     _classesMapping: dict = dict()
@@ -120,7 +120,7 @@ class Munich480(Segmentation_Dataset_Base):
             classesCount = 27, 
             x_transform=transforms,
             y_transform = transforms,
-            oneHot = False
+            oneHot = True
         )
         
         
@@ -174,131 +174,193 @@ class Munich480(Segmentation_Dataset_Base):
         return dates
     
     
-    async def _normalize_dif_data(self, data: np.array) -> np.array:
+    def _normalize_dif_data(self, data: np.array) -> np.array:
         """Normalizza i dati tra 0 e 255."""
         return ((data - np.min(data)) / (np.max(data) - np.min(data)) * 255).astype(np.uint8)
     
     
-    async def _load_dif_file(self, filePath:str, normalize: bool = True) -> np.array:
-        async with Munich480._semaphore:
-            with rasterio.open(filePath) as src:
-                data = src.read()
+    def _load_dif_file(self, filePath:str, normalize: bool = True) -> np.array:
+        #async with Munich480._semaphore:
+        with rasterio.open(filePath) as src:
+            data = src.read()
+            
+            if normalize:
+                return self._normalize_dif_data(data)
+            return data
                 
-                if normalize:
-                    return await self._normalize_dif_data(data)
-                return data
-                
         
-    async def _load_y(self, folder:str):
-        return await self._load_dif_file(filePath=os.path.join(folder, "y.tif"), normalize = False)
+    def _load_y(self, folder:str):
+        return self._load_dif_file(filePath=os.path.join(folder, "y.tif"), normalize = False)
         
         
-    async def _load_year_sequenze(self, year: str, number: str, use_coroutines: bool = True):
-        
-        semaphore = asyncio.Semaphore(value=5)
-        tasks_x10: list[asyncio.Task] = []
-        tasks_x20: list[asyncio.Task] = []
-        tasks_x60: list[asyncio.Task] = []
-        sequenzeFolder:str = os.path.join(self._folderPath, year, str(number))
-        
+    def _load_year_sequenze(self, year: str, number: str):
+        sequenzeFolder = os.path.join(self._folderPath, year, str(number))
         dates = self.get_dates(path=sequenzeFolder, sample_number=Munich480.TemporalSize)
+
+        #torch.empty
+        x: torch.Tensor = torch.empty((Munich480.TemporalSize, Munich480.ImageChannels.sum(), Munich480.ImageHeight, Munich480.ImageWidth), dtype=torch.float32)
+        #x = x * 255
+        current_channel_index: int = 0
+
+        #print(x.shape)
+
+        for t, date in enumerate(dates):
+            current_channel_index = 0
+            
+            #print(f"temporale instance {t}: {date}")
+
+            if Munich480.Distance.m10 in self._distance:
+                data = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_10m.tif"))
+                tensor = torch.from_numpy(data) 
+                tensor = F.interpolate(tensor.unsqueeze(0), size=(Munich480.ImageHeight, Munich480.ImageWidth))
+                num_channels = tensor.size(1)
+                
+                torch.set_printoptions(profile="full")
+                torch.set_printoptions(linewidth=200)
+                # print("prima: ", x[0, 0:5])
+                
+                # print(f"x10 aded in: [{t},{current_channel_index}:{current_channel_index + num_channels}]")
+                x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor  # Assegna i canali
+                current_channel_index += num_channels  
+                
+                # print("dopo: ", x[0, 0:5])
+                # os._exit(0)
+
+            if Munich480.Distance.m20 in self._distance:
+                data = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_20m.tif"))
+                tensor = torch.from_numpy(data)  
+                tensor = F.interpolate(tensor.unsqueeze(0), size=(Munich480.ImageHeight, Munich480.ImageWidth))
+                num_channels = tensor.size(1)  
+                
+                #print(f"x20 aded in: [{t},{current_channel_index}:{current_channel_index + num_channels}]")
+                x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor  # Assegna i canali
+                current_channel_index += num_channels  
+                
+
+            if Munich480.Distance.m60 in self._distance:
+                data = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_60m.tif"))
+                tensor = torch.from_numpy(data)  
+                tensor = F.interpolate(tensor.unsqueeze(0), size=(Munich480.ImageHeight, Munich480.ImageWidth))
+                num_channels = tensor.size(1)  
+                
+                #print(f"x60 aded in: [{t},{current_channel_index}:{current_channel_index + num_channels}]")
+                x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor  # Assegna i canali
+                current_channel_index += num_channels  
+                        
+        y = self._load_y(sequenzeFolder)
+        return x, y
+    
+    
+    # async def _load_year_sequenze(self, year: str, number: str, use_coroutines: bool = False):
         
-        if Munich480.Distance.m10 in self._distance:
-            for date in dates:
-                tasks_x10.append(self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_10m.tif")))
+    
+            
+        
+        
+    #     semaphore = asyncio.Semaphore(value=5)
+    #     tasks_x10: list[asyncio.Task] = []
+    #     tasks_x20: list[asyncio.Task] = []
+    #     tasks_x60: list[asyncio.Task] = []
+        
+        
+    #     dates = self.get_dates(path=sequenzeFolder, sample_number=Munich480.TemporalSize)
+        
+    #     if Munich480.Distance.m10 in self._distance:
+    #         for date in dates:
+    #             tasks_x10.append(self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_10m.tif")))
                    
-        if Munich480.Distance.m20 in self._distance:
-            for date in dates:
-                tasks_x20.append(self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_20m.tif")))
+    #     if Munich480.Distance.m20 in self._distance:
+    #         for date in dates:
+    #             tasks_x20.append(self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_20m.tif")))
                 
-        if Munich480.Distance.m60 in self._distance:
-            for date in dates:
-                tasks_x60.append(self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_60m.tif")))
+    #     if Munich480.Distance.m60 in self._distance:
+    #         for date in dates:
+    #             tasks_x60.append(self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_60m.tif")))
             
         
-        #combined_data = np.ndarray(shape=(Munich480._ImageChannels, Munich480._ImageHeight, Munich480._ImageWidth, Munich480._TemporalSize), dtype=np.uint8)
-        x10_tensor: torch.Tensor | None = None 
-        x20_tensor: torch.Tensor | None = None
-        x60_tensor: torch.Tensor | None = None
-        x: torch.Tensor | None = None
-        tensor_list: list[torch.Tensor] = []
+    #     #combined_data = np.ndarray(shape=(Munich480._ImageChannels, Munich480._ImageHeight, Munich480._ImageWidth, Munich480._TemporalSize), dtype=np.uint8)
+    #     x10_tensor: torch.Tensor | None = None 
+    #     x20_tensor: torch.Tensor | None = None
+    #     x60_tensor: torch.Tensor | None = None
+    #     x: torch.Tensor | None = None
+    #     tensor_list: list[torch.Tensor] = []
         
-        if use_coroutines:
-            if Munich480.Distance.m10 in self._distance:
-                npArray_x10 = np.array(await asyncio.gather(*tasks_x10))
-                x10_tensor = torch.from_numpy(npArray_x10)
-                # x10_tensor = F.interpolate(x10_tensor, size=(Munich480._ImageHeight, Munich480._ImageWidth))
-                #x10_tensor = x10_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
-                tensor_list.append(x10_tensor)
+    #     if use_coroutines:
+    #         if Munich480.Distance.m10 in self._distance:
+    #             npArray_x10 = np.array(await asyncio.gather(*tasks_x10))
+    #             x10_tensor = torch.from_numpy(npArray_x10)
+    #             # x10_tensor = F.interpolate(x10_tensor, size=(Munich480._ImageHeight, Munich480._ImageWidth))
+    #             #x10_tensor = x10_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
+    #             tensor_list.append(x10_tensor)
 
                 
-            if Munich480.Distance.m20 in self._distance:
-                npArray_x20 = np.array(await asyncio.gather(*tasks_x20))
-                x20_tensor = torch.from_numpy(npArray_x20)
-                x20_tensor = F.interpolate(x20_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
-                #x20_tensor = x20_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
-                tensor_list.append(x20_tensor)
+    #         if Munich480.Distance.m20 in self._distance:
+    #             npArray_x20 = np.array(await asyncio.gather(*tasks_x20))
+    #             x20_tensor = torch.from_numpy(npArray_x20)
+    #             x20_tensor = F.interpolate(x20_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
+    #             #x20_tensor = x20_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
+    #             tensor_list.append(x20_tensor)
                 
                 
-            if Munich480.Distance.m60 in self._distance:
-                npArray_x60 = np.array(await asyncio.gather(*tasks_x60))
-                x60_tensor = torch.from_numpy(npArray_x60)
-                x60_tensor = F.interpolate(x60_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
-                #x60_tensor = x60_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
-                tensor_list.append(x60_tensor)
+    #         if Munich480.Distance.m60 in self._distance:
+    #             npArray_x60 = np.array(await asyncio.gather(*tasks_x60))
+    #             x60_tensor = torch.from_numpy(npArray_x60)
+    #             x60_tensor = F.interpolate(x60_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
+    #             #x60_tensor = x60_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
+    #             tensor_list.append(x60_tensor)
             
             
-            x = torch.cat(tensor_list, dim=1) #(32, c, h, w)
-            y = await self._load_y(sequenzeFolder)
-            return x, y
+    #         x = torch.cat(tensor_list, dim=1) #(32, c, h, w)
+    #         y = await self._load_y(sequenzeFolder)
+    #         return x, y
         
-        else:
-            x10Data: list = []
-            x20Data: list = []
-            x60Data: list = []
+    #     else:
+    #         x10Data: list = []
+    #         x20Data: list = []
+    #         x60Data: list = []
             
-            if Munich480.Distance.m10 in self._distance:
-                for i, task in enumerate(tasks_x10):
-                    x10Data.append(task())
+    #         if Munich480.Distance.m10 in self._distance:
+    #             for i, task in enumerate(tasks_x10):
+    #                 x10Data.append(task())
                 
-                npArray_x10 = np.array(x10Data)
-                x10_tensor = torch.from_numpy(npArray_x10)
-                x10_tensor = F.interpolate(x10_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
-                #x10_tensor = x10_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
-                tensor_list.append(x10_tensor)
+    #             npArray_x10 = np.array(x10Data)
+    #             x10_tensor = torch.from_numpy(npArray_x10)
+    #             x10_tensor = F.interpolate(x10_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
+    #             #x10_tensor = x10_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
+    #             tensor_list.append(x10_tensor)
                 
-            if Munich480.Distance.m20 in self._distance:
-                for i, task in enumerate(tasks_x20):
-                    x20Data.append(task())
+    #         if Munich480.Distance.m20 in self._distance:
+    #             for i, task in enumerate(tasks_x20):
+    #                 x20Data.append(task())
 
-                npArray_x20 = np.array(x20Data)
-                x20_tensor = torch.from_numpy(npArray_x20)
-                x20_tensor = F.interpolate(x20_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
-                #x20_tensor = x20_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
-                tensor_list.append(x20_tensor)
+    #             npArray_x20 = np.array(x20Data)
+    #             x20_tensor = torch.from_numpy(npArray_x20)
+    #             x20_tensor = F.interpolate(x20_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
+    #             #x20_tensor = x20_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
+    #             tensor_list.append(x20_tensor)
                 
                 
-            if Munich480.Distance.m60 in self._distance:
-                for i, task in enumerate(tasks_x60):
-                    x60Data.append(task())
+    #         if Munich480.Distance.m60 in self._distance:
+    #             for i, task in enumerate(tasks_x60):
+    #                 x60Data.append(task())
 
-                npArray_x60 = np.array(x60Data)
-                x60_tensor = torch.from_numpy(npArray_x60)
-                x60_tensor = F.interpolate(x60_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
-                #x60_tensor = x60_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
-                tensor_list.append(x60_tensor)
+    #             npArray_x60 = np.array(x60Data)
+    #             x60_tensor = torch.from_numpy(npArray_x60)
+    #             x60_tensor = F.interpolate(x60_tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
+    #             #x60_tensor = x60_tensor.view(-1, Munich480._ImageHeight, Munich480._ImageWidth)
+    #             tensor_list.append(x60_tensor)
             
             
-            x = torch.cat(tensor_list, dim=Munich480._stack_axis)
-            y = self._load_y(sequenzeFolder)
-            return x, y
+    #         x = torch.cat(tensor_list, dim=Munich480._stack_axis)
+    #         y = self._load_y(sequenzeFolder)
+    #         return x, y
         
         
                 
     def _getSize(self) -> int:
         return np.size(self._dataSequenze)        
 
-    async def _load_data(self, idx: int):
+    def _load_data(self, idx: int):
         x16: torch.Tensor | None = None
         x17: torch.Tensor | None = None
         y16: torch.Tensor | None = None
@@ -307,24 +369,25 @@ class Munich480(Segmentation_Dataset_Base):
         tensor_list: list[torch.Tensor] = []
         
         if Munich480.Year.Y2016 in self._years:
-            x16, y16 = await self._load_year_sequenze("data16", str(idx))
+            x16, y16 = self._load_year_sequenze("data16", str(idx))
             tensor_list.append(x16)
               
         if Munich480.Year.Y2017 in self._years:
-            x17, y17 = await self._load_year_sequenze("data17", str(idx))
+            x17, y17 = self._load_year_sequenze("data17", str(idx))
             tensor_list.append(x17)
             
         x = torch.cat(tensor_list)
         y = y16 if y16 is not None else y17
         
-        
+        #print(f"Procces {os.getpid()} loading copmpleted")
         return x, y
 
     @DatasetBase._FormatResult
     def _getItem(self, idx: int) -> any:
         idx = self._mapIndex(idx)
     
-        x, y = asyncio.run(self._load_data(idx))
+        #x, y = asyncio.run(self._load_data(idx))
+        x, y = self._load_data(idx)
         
         if not self._useTemporalSize:
             x = x.view(-1, Munich480.ImageHeight, Munich480.ImageWidth)
@@ -339,15 +402,23 @@ class Munich480(Segmentation_Dataset_Base):
         x.float()
         
         #print(x.shape, y.shape) ---> torch.Size([48, 48, 832]) np.size(48, 48)
+        
+        return x, y 
             
     
+    def adjustData(self, sample: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
+        x, y = sample
+        y = y.permute(2,0,1)
+        y = y.float()
+        
+        # for i in range(y.shape[0]):
+        #     print(f"Layer{i}:{y[i]}")
+        
+
+        
         return x, y
             
-    
-            
-        #return asyncio.run(_load_data())
-            
-       
+        
     def show_sample(self, sample) -> None:
         # Assumiamo che `sample` abbia la forma [C, H, W]
         

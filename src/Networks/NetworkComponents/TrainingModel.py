@@ -49,7 +49,7 @@ class TraingBase(LightModelBase):
     def _commonStep(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
         #y_hat = self.__net(x)
         y_hat = self.forward(x)
-        loss = self._lossFunction(y_hat, y)
+        loss = self._lossFunction(y_hat, y.squeeze(1))
         return {"loss": loss, "y_hat": y_hat}
 
 
@@ -161,7 +161,7 @@ class ImageSegmentation_TrainingBase(ImageClassificationBase):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
         scheduler = {
-            'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1),
+            'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5),
             'interval': 'epoch',
         }
         return [optimizer], [scheduler]

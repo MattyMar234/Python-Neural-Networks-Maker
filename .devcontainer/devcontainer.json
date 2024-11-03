@@ -13,8 +13,9 @@
     "dockerComposeFile": ["../docker-compose.yml"],
     "service": "dev",  // Nome del servizio Dev nel docker-compose.yml
     "workspaceFolder": "/app",
-    "runArgs": ["--gpus", "all"],
+    "runArgs": ["--gpus", "all", "--shm-size=1g"],
     "postCreateCommand": "pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt",
+    
 
     "mounts": [
         "source=${localWorkspaceFolder},target=/app,type=bind",
@@ -35,7 +36,13 @@
             "extensions" : [
                 "streetsidesoftware.code-spell-checker",
                 "ms-python.isort",
-                "ms-ossdata.vscode-postgresql"  // Estensione per interagire con PostgreSQL
+                "njqdev.vscode-python-typehint",
+                "kaih2o.python-resource-monitor",
+                "kevinrose.vsc-python-indent",
+                "ms-ossdata.vscode-postgresql",  // Estensione per interagire con PostgreSQL
+                "tabnine.tabnine-vscode",
+                "amazonwebservices.amazon-q-vscode",
+                "amazonwebservices.aws-toolkit-vscode"
             ]
         }
     }

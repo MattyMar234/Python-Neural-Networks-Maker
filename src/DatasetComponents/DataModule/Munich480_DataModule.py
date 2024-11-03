@@ -51,8 +51,8 @@ class Munich480_DataModule(DataModuleBase):
         
         self._distance = distance
         self._year = year
-        self._persistent_workers = True
-        self._pin_memory = True
+        self._persistent_workers: bool = True
+        self._pin_memory: bool = True
         self._useTemporalSize = useTemporalSize
         self._total_channel = 0
         
@@ -105,10 +105,10 @@ class Munich480_DataModule(DataModuleBase):
 
 
     def train_dataloader(self) -> DataLoader:
-        return DataLoader(self._TRAIN, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=True, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True)
+        return DataLoader(self._TRAIN, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=True, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True, prefetch_factor=1)
 
     def val_dataloader(self) -> DataLoader:
-        return DataLoader(self._VAL, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True)
+        return DataLoader(self._VAL, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True, prefetch_factor=1)
 
     def test_dataloader(self) -> DataLoader:
-        return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True)
+        return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True, prefetch_factor=1)

@@ -50,8 +50,8 @@ def main(args: argparse.Namespace | None) -> None:
     deviceName = torch.cuda.get_device_name(device=None)
     
     if device.type == 'cuda' and deviceName == 'NVIDIA GeForce RTX 3060 Ti':
-        print(f"set float32 matmul precision to \'high\'")
-        torch.set_float32_matmul_precision('high')
+        print(f"set float32 matmul precision to \'medium\'")
+        torch.set_float32_matmul_precision('medium')
         
         """You are using a CUDA device ('NVIDIA GeForce RTX 3060 Ti') that 
         has Tensor Cores. To properly utilize them, you should set 
@@ -63,12 +63,19 @@ def main(args: argparse.Namespace | None) -> None:
         datasetFolder = "/dataset/munich480",
         batch_size=args.batch_size,
         num_workers=args.workers,
-        year= Munich480.Year.Y2016 | Munich480.Year.Y2017,
+        year= Munich480.Year.Y2016,# | Munich480.Year.Y2017,
         distance= Munich480.Distance.m10 | Munich480.Distance.m20 | Munich480.Distance.m60,
     ) 
     
-    datamodule.setup()
-    train = datamodule.train_dataloader()
+    # datamodule.setup()
+    # train = datamodule.train_dataloader()
+    # sample = train.dataset[0]
+    
+    # print(sample[0].shape)
+    
+    # train.dataset.show_sample(sample[0])
+    
+    # return 
     
     
     # UNET, trainer = NetworkFactory.makeNetwork(
@@ -78,12 +85,9 @@ def main(args: argparse.Namespace | None) -> None:
     #     num_classes=27
     # )
     
-    print(datamodule.number_of_channels())
+    #print(datamodule.number_of_channels())
     
     UNET_2D_Model: ModelBase = UNET_2D(in_channel=datamodule.number_of_channels(), out_channel=datamodule.number_of_classes(), inputSize= datamodule.input_size())
-    
-    print(UNET_2D_Model.makeSummary())
-    return
 
 
     databaseParametre = DatabaseParametre(
@@ -98,39 +102,26 @@ def main(args: argparse.Namespace | None) -> None:
     
     
     
-    training_trasforms1 = transforms.Compose([
-        # transforms.RandomHorizontalFlip(),
-        # transforms.RandomVerticalFlip(),
-        #transforms.RandomRotation(degrees=15, fill=(255, 255, 255)),
-        #transforms.Resize((572, 572)),
-        transforms.ToTensor()
-    ])
+    # TRAINING_DATASET = Munich480(
+    #     folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets','munich480'),
+    #     mode= Munich480.DataType.TRAINING,
+    #     year=Munich480.Year.Y2016,
+    #     transforms=training_trasforms1,
+    # )
     
-    validation_trasforms1 = transforms.Compose([
-        #transforms.Resize((572, 572)),
-        transforms.ToTensor()
-    ])
+    # VALIDATION_DATASET = Munich480(
+    #     folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets','munich480'),
+    #     mode= Munich480.DataType.VALIDATION,
+    #     year=Munich480.Year.Y2016,
+    #     transforms=validation_trasforms1
+    # )
     
-    TRAINING_DATASET = Munich480(
-        folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets','munich480'),
-        mode= Munich480.DataType.TRAINING,
-        year=Munich480.Year.Y2016,
-        transforms=training_trasforms1,
-    )
-    
-    VALIDATION_DATASET = Munich480(
-        folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets','munich480'),
-        mode= Munich480.DataType.VALIDATION,
-        year=Munich480.Year.Y2016,
-        transforms=validation_trasforms1
-    )
-    
-    TEST_DATASET = Munich480(
-        folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets', 'munich480'),
-        mode= Munich480.DataType.VALIDATION,
-        year=Munich480.Year.Y2016,
-        transforms=validation_trasforms1
-    )
+    # TEST_DATASET = Munich480(
+    #     folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets', 'munich480'),
+    #     mode= Munich480.DataType.VALIDATION,
+    #     year=Munich480.Year.Y2016,
+    #     transforms=validation_trasforms1
+    # )
     
     
     
@@ -216,7 +207,7 @@ def main(args: argparse.Namespace | None) -> None:
     
     networkManager = NetworkManager(
         device=device,
-        model=UNET_model,
+        model=UNET_2D_Model,
         args = args,
         workingFolder= MODELS_OUTPUT_FOLDER,
         # ModelWeights_Input_File  = None,
@@ -228,8 +219,7 @@ def main(args: argparse.Namespace | None) -> None:
     
     
     networkManager.lightTrainNetwork(
-        trainingDataset=TRAINING_DATASET,#TRAINING_DATASET,
-        testDataset=VALIDATION_DATASET,
+        datamodule = datamodule
     )
     
     #networkManager.lightTestNetwork(testDataset=TEST_DATASET)
@@ -254,7 +244,7 @@ if __name__ == "__main__":
     parser.add_argument('--gpus',               type=int,   default=[0],            nargs='+')
 
     #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0 --ckpt_path /app/Models/UNET_2D/checkpoints/epoch=9-avg_val_loss=0.43453678.ckpt
-    
+     #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0
     
     # parser.add_argument("--devices", type=int, default=0)
     # parser.add_argument("--epochs", type=int, default=1)

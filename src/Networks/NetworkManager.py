@@ -13,6 +13,8 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, DeviceStatsMonitor
 
+from DatasetComponents.DataModule import DataModuleBase
+
 from .NetworkComponents.TrainingModel import *
 
 from PIL import Image
@@ -82,30 +84,30 @@ class NetworkManager:
             raise FileNotFoundError(f'File {path} non trovato')
 
 
-    def lightTrainNetwork(self, trainingDataset: Dataset, testDataset: Dataset, **kwargs):
+    def lightTrainNetwork(self, datamodule: DataModuleBase, **kwargs):
         
         
-        train_dataloader = DataLoader(
-            dataset = trainingDataset, 
-            batch_size = self._args.batch_size, 
-            shuffle = True, 
-            num_workers = self._args.workers, 
-            #worker_init_fn=trainingDataset.worker_init_fn,
-            pin_memory=True,
-            persistent_workers=True
-        )
+        # train_dataloader = DataLoader(
+        #     dataset = trainingDataset, 
+        #     batch_size = self._args.batch_size, 
+        #     shuffle = True, 
+        #     num_workers = self._args.workers, 
+        #     #worker_init_fn=trainingDataset.worker_init_fn,
+        #     pin_memory=True,
+        #     persistent_workers=True
+        # )
         
-        validation_dataloader = DataLoader(
-            dataset = testDataset,     
-            batch_size = self._args.batch_size, 
-            shuffle = False, 
-            num_workers = self._args.workers, 
-            #worker_init_fn=trainingDataset.worker_init_fn,
-            pin_memory=True,
-            persistent_workers=True
-        )
+        # validation_dataloader = DataLoader(
+        #     dataset = testDataset,     
+        #     batch_size = self._args.batch_size, 
+        #     shuffle = False, 
+        #     num_workers = self._args.workers, 
+        #     #worker_init_fn=trainingDataset.worker_init_fn,
+        #     pin_memory=True,
+        #     persistent_workers=True
+        # )
         
-        pl.seed_everything(NetworkManager.__trainingRandomSeed, workers= self._args.workers > 0)
+        pl.seed_everything(NetworkManager.__trainingRandomSeed, workers= True)#self._args.workers > 0)
         
         
         
@@ -140,17 +142,25 @@ class NetworkManager:
             callbacks=[
                 checkpoint_callback, 
                 #DeviceStatsMonitor()
-            ]
+            ],
+            accumulate_grad_batches=1,
+            precision="bf16-mixed"#"16-true"#"16-mixed"
         )
         
         if self._args.compile == 1:
             self._model = torch.compile(self._model)
         
         
+        # trainer.fit(
+        #     model=self._model,#torch.compile(traiableModel), 
+        #     train_dataloaders=train_dataloader,
+        #     val_dataloaders=validation_dataloader,
+        #     ckpt_path=self._args.ckpt_path
+        # )
+        
         trainer.fit(
             model=self._model,#torch.compile(traiableModel), 
-            train_dataloaders=train_dataloader,
-            val_dataloaders=validation_dataloader,
+            datamodule=datamodule,
             ckpt_path=self._args.ckpt_path
         )
         

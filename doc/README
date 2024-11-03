@@ -1,2 +1,6 @@
 To launch the tensorboard dashboard run the following command on the commandline.
 tensorboard --logdir=lightning_logs/
+
+
+Per vedere la shm disponibile nel sistema:
+df -h /dev/shm
