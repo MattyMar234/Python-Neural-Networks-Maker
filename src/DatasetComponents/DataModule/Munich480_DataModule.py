@@ -1,5 +1,6 @@
 from ast import Tuple
 from typing import Final
+from matplotlib import pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 from torchvision import transforms
@@ -112,3 +113,87 @@ class Munich480_DataModule(DataModuleBase):
 
     def test_dataloader(self) -> DataLoader:
         return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True, prefetch_factor=1)
+    
+    
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, X_as_Int: bool = False) -> None:
+        assert x is not None, "x is None"
+        assert y_hat is not None, "y_hat is None"
+        assert y is not None, "y is None"
+        
+        rowElement: int = 8
+        col:int = 0
+        row: int = 0
+        idx: int = 0
+        
+        
+        x = x.cpu().detach()
+        x = x.squeeze(0) # elimino la dimensione della batch
+        
+        if X_as_Int:
+            x = x.int()
+        else :
+            x = x * 255
+            x = x.int()
+        
+        
+        y_hat = y_hat.cpu().detach().squeeze(0)
+        y = y.cpu().detach()
+        
+        num_images = int((x.shape[0] // 13))  # Numero di immagini nel batch
+        fig, axes = plt.subplots(rowElement, (num_images // rowElement) + (num_images % rowElement != 0) + 3, figsize=(16, 12))  # Griglia verticale per ogni immagine
+
+        label_map = y.argmax(dim=0).numpy()         # Etichetta per l'immagine corrente
+        pred_map = y_hat.argmax(dim=0).numpy()      # Predizione con massimo di ciascun layer di `y_hat`
+
+        
+        while idx < num_images:
+        
+            # Estrazione dell'immagine (13 canali)
+            image = x[idx*13:(idx+1)*13, :, :]
+            red, green, blue = image[2], image[1], image[0]
+            rgb_image = torch.stack([red, green, blue], dim=0).permute(1, 2, 0).numpy()
+
+           
+            ax = axes[row, col]
+            ax.imshow(rgb_image)
+            #ax.set_title(f"Image {i+1} RGB")
+            ax.axis('off')
+            
+            row += 1
+            idx += 1
+            
+            if row == rowElement:
+                row = 0
+                col += 1
+                
+            
+        
+        if (num_images % rowElement != 0):       
+            col += 1
+        
+        for i in range(8):
+           
+            # 2. Mappa etichetta `y`
+            ax = axes[i, col]
+            ax.imshow(label_map, cmap='tab20')
+            #ax.set_title(f"Label {i+1}")
+            ax.axis('off')
+            
+            # 3. Mappa predizioni `y_hat`
+            ax = axes[i, col + 1]
+            ax.imshow(pred_map, cmap='tab20')
+            #ax.set_title(f"Pred. {i+1}")
+            ax.axis('off')
+            
+            # 4. Mappa della loss
+            # ax = axes[3, i]
+            # ax.imshow(loss_map, cmap='hot')
+            # ax.set_title(f"Loss {i+1}")
+            # ax.axis('off')
+
+        plt.tight_layout()
+        plt.show()
+        
+        
+        
+        

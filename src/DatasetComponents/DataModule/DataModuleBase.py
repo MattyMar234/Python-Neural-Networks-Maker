@@ -57,5 +57,9 @@ class DataModuleBase(pl.LightningDataModule):
     @abstractmethod
     def test_dataloader(self):
         ...
+    
+    @abstractmethod
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor) -> None:
+        ...
 
     

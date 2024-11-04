@@ -59,13 +59,15 @@ def main(args: argparse.Namespace | None) -> None:
         trade-off precision for performance. 
         For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision"""
      
-    datamodule = Munich480_DataModule(
+    datamodule: DataModuleBase = Munich480_DataModule(
         datasetFolder = "/dataset/munich480",
         batch_size=args.batch_size,
         num_workers=args.workers,
         year= Munich480.Year.Y2016,# | Munich480.Year.Y2017,
         distance= Munich480.Distance.m10 | Munich480.Distance.m20 | Munich480.Distance.m60,
     ) 
+    
+    
     
     # datamodule.setup()
     # train = datamodule.train_dataloader()
@@ -102,26 +104,7 @@ def main(args: argparse.Namespace | None) -> None:
     
     
     
-    # TRAINING_DATASET = Munich480(
-    #     folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets','munich480'),
-    #     mode= Munich480.DataType.TRAINING,
-    #     year=Munich480.Year.Y2016,
-    #     transforms=training_trasforms1,
-    # )
-    
-    # VALIDATION_DATASET = Munich480(
-    #     folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets','munich480'),
-    #     mode= Munich480.DataType.VALIDATION,
-    #     year=Munich480.Year.Y2016,
-    #     transforms=validation_trasforms1
-    # )
-    
-    # TEST_DATASET = Munich480(
-    #     folderPath= os.path.join(Path(os.getcwd()).parent.absolute(), 'Data', 'Datasets', 'munich480'),
-    #     mode= Munich480.DataType.VALIDATION,
-    #     year=Munich480.Year.Y2016,
-    #     transforms=validation_trasforms1
-    # )
+   
     
     
     
@@ -210,17 +193,34 @@ def main(args: argparse.Namespace | None) -> None:
         model=UNET_2D_Model,
         args = args,
         workingFolder= MODELS_OUTPUT_FOLDER,
-        # ModelWeights_Input_File  = None,
-        # ModelWeights_Output_File = f'{UNET_model.__class__.__name__}_v1.pth',
-        # ckpt_file                = f'{UNET_model.__class__.__name__}_v1.ckpt'
     )
     
+    if args.train:
+        networkManager.lightTrainNetwork(datamodule = datamodule)
+
+    if args.test:
+        #networkManager.lightTestNetwork(datamodule = datamodule)
     
+        datamodule.setup()
+        dataloader: DataLoader = datamodule.test_dataloader()#datamodule.test_dataloader()
+        dataset = dataloader.dataset
+        
+        checkpoint = torch.load(args.ckpt_path)
+        UNET_2D_Model.load_state_dict(checkpoint["state_dict"])
+        UNET_2D_Model.to(device)
+        UNET_2D_Model.eval()
+        
+        
+        with torch.no_grad():
+            for index in range(len(dataset)):
+                x, y = dataset[index]
+                x = x.to(device)
+     
+                y_hat = UNET_2D_Model(x.unsqueeze(0))
+                
+                datamodule.show_processed_sample(x, y_hat, y)
+                return
     
-    
-    networkManager.lightTrainNetwork(
-        datamodule = datamodule
-    )
     
     #networkManager.lightTestNetwork(testDataset=TEST_DATASET)
 
@@ -230,18 +230,20 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument('--ckpt_path',          type=Path,  default=None,           help='checkpoint or pretrained path')
-    parser.add_argument('--ouputs',             type=Path,  default=MODELS_OUTPUT_FOLDER,  help='logs and data output path')
-    parser.add_argument('--data_dir',           type=Path,  default=Path.cwd().parent)
-    parser.add_argument('--dataset',            type=str,   default='?',            choices=['lombardia', 'munich'])
-    parser.add_argument('--test_id',            type=str,   default='A',            choices=['A', 'Y'])
-    parser.add_argument('--arch',               type=str,   default='swin_unetr',   choices=['LaNet', 'AlexNet', 'VCC19', 'UNet'])
-    parser.add_argument('--compile',            type=int,   default= 0, choices=[0, 1])
-    parser.add_argument('-e' , '--epochs',      type=int,   default=1)
-    parser.add_argument('-bs','--batch_size',   type=int,   default=2)
-    parser.add_argument('-w' ,'--workers',      type=int,   default=0)
-    parser.add_argument('--gpu_or_cpu',         type=str,   default='gpu',          choices=['gpu', 'cpu'])
-    parser.add_argument('--gpus',               type=int,   default=[0],            nargs='+')
+    parser.add_argument('--ckpt_path',         type=Path,  default=None,           help='checkpoint or pretrained path')
+    parser.add_argument('--ouputs',            type=Path,  default=MODELS_OUTPUT_FOLDER,  help='logs and data output path')
+    parser.add_argument('--data_dir',          type=Path,  default=Path.cwd().parent)
+    parser.add_argument('--dataset',           type=str,   default='?',            choices=['lombardia', 'munich'])
+    parser.add_argument('--test_id',           type=str,   default='A',            choices=['A', 'Y'])
+    parser.add_argument('--arch',              type=str,   default='?',            choices=['LaNet', 'AlexNet', 'VCC19', 'UNet'])
+    parser.add_argument('-e', '--epochs',      type=int,   default=1)
+    parser.add_argument('-b', '--batch_size',  type=int,   default=2)
+    parser.add_argument('-w', '--workers',     type=int,   default=0)
+    parser.add_argument('-d', '--gpu_or_cpu',  type=str,   default='gpu',          choices=['gpu', 'cpu'])
+    parser.add_argument('--gpus',              type=int,   default=[0],            nargs='+')
+    parser.add_argument('--test' ,    action='store_true')
+    parser.add_argument('--train', action='store_true')
+    parser.add_argument('--compile',  action='store_true')
 
     #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0 --ckpt_path /app/Models/UNET_2D/checkpoints/epoch=9-avg_val_loss=0.43453678.ckpt
      #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0
@@ -252,8 +254,13 @@ if __name__ == "__main__":
     if '--help' in sys.argv or '-help' in sys.argv or '-h' in sys.argv:
         parser.print_help()
         sys.exit(0)
+        
     
     args = parser.parse_args()
+    
+    if not args.test and not args.train:
+        print("Please specify either --test or --train")
+        sys.exit(1)
     
     #print(type(args))
     
