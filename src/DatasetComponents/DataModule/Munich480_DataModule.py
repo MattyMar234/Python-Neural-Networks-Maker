@@ -1,6 +1,8 @@
 from ast import Tuple
-from typing import Final
+from typing import Dict, Final
 from matplotlib import pyplot as plt
+from matplotlib.colors import ListedColormap
+import matplotlib.patches as mpatches
 import numpy as np
 import pytorch_lightning as pl
 from torchvision import transforms
@@ -23,10 +25,19 @@ class Munich480_DataModule(DataModuleBase):
     ImageChannels: Final[np.array] = np.array([4,6,3])
     ImageWidth: Final[int] = 48
     ImageHeight: Final[int] = 48
-    
     ClassesCount: Final[int] = 27
     
     _KAGGLE_DATASET_URL: Final[str] = "https://www.kaggle.com/datasets/artelabsuper/sentinel2-munich480"
+    _CLASSES_FILE = "classes.txt"
+    _MAP_COLORS: Dict[int, str] = {
+        0 : '#000000',  1 : '#ff7f0e',  2 : '#2ca02c',   3 : '#d62728',
+        4 : '#9467bd',  5 : '#8c564b',  6 : '#e377c2',   7 : '#7f7f7f',
+        8 : '#bcbd22',  9 : '#17becf', 10 : '#ff9896',  11 : '#98df8a',
+        12 : '#c5b0d5', 13 : '#ffbb78', 14 : '#c49c94',  15 : '#f7b6d2',
+        16 : '#9edae5', 17 : '#aec7e8', 18 : '#ffcc5c',  19 : '#ff6f69',
+        20 : '#96ceb4', 21 : '#ff9b85', 22 : '#c1c1c1',  23 : '#ffd700',
+        24 : '#b2e061', 25 : '#ff4f81', 26 : '#aa42f5' 
+    }
     
     def __init__(
         self, 
@@ -56,6 +67,11 @@ class Munich480_DataModule(DataModuleBase):
         self._pin_memory: bool = True
         self._useTemporalSize = useTemporalSize
         self._total_channel = 0
+        
+        self._classesMapping: dict = {}
+        
+        
+        
         
         if Munich480.Distance.m10 in distance:
             self._total_channel += Munich480_DataModule.ImageChannels[0]
@@ -97,8 +113,22 @@ class Munich480_DataModule(DataModuleBase):
         if self._download:
             self._DownloadDataset(url= Munich480_DataModule._KAGGLE_DATASET_URL, folder= self._datasetFolder)
     
+    def _read_classes(self) -> None:
+        with open(os.path.join(self._datasetFolder, Munich480_DataModule._CLASSES_FILE), 'r') as f:
+            classes = f.readlines()
+
+        for row in classes:
+            row = row.replace("\n", "")
+            if '|' in row:
+                id, cl = row.split('|')
+                self._classesMapping[int(id)] = cl     
+        print(self._classesMapping)
+
 
     def setup(self, stage=None) -> None:
+        
+        self._read_classes()
+        
         self._TRAIN = Munich480(self._datasetFolder, mode= Munich480.DataType.TRAINING, year= self._year, distance=self._distance, transforms=self._training_trasforms)
         self._VAL   = Munich480(self._datasetFolder, mode= Munich480.DataType.VALIDATION, year= self._year, distance=self._distance, transforms=self._test_trasforms)
         self._TEST  = Munich480(self._datasetFolder, mode= Munich480.DataType.TEST, year= self._year, distance=self._distance, transforms=self._test_trasforms)
@@ -115,15 +145,11 @@ class Munich480_DataModule(DataModuleBase):
         return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True, prefetch_factor=1)
     
     
-    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, X_as_Int: bool = False) -> None:
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, X_as_Int: bool = False) -> None:
         assert x is not None, "x is None"
         assert y_hat is not None, "y_hat is None"
         assert y is not None, "y is None"
         
-        rowElement: int = 8
-        col:int = 0
-        row: int = 0
-        idx: int = 0
         
         
         x = x.cpu().detach()
@@ -139,60 +165,93 @@ class Munich480_DataModule(DataModuleBase):
         y_hat = y_hat.cpu().detach().squeeze(0)
         y = y.cpu().detach()
         
-        num_images = int((x.shape[0] // 13))  # Numero di immagini nel batch
-        fig, axes = plt.subplots(rowElement, (num_images // rowElement) + (num_images % rowElement != 0) + 3, figsize=(16, 12))  # Griglia verticale per ogni immagine
-
-        label_map = y.argmax(dim=0).numpy()         # Etichetta per l'immagine corrente
-        pred_map = y_hat.argmax(dim=0).numpy()      # Predizione con massimo di ciascun layer di `y_hat`
+        
+        #fig, axes = plt.subplots(rowElement, (num_images // rowElement) + (num_images % rowElement != 0) + 3, figsize=(16, 12))  # Griglia verticale per ogni immagine
 
         
-        while idx < num_images:
+
+        #=========================================================================#
+        # Prima finestra: Visualizzazione delle immagini RGB
+        rowElement: int = 8
+        num_images: int = int(x.shape[0] // 13)  # Numero di immagini nel batch
+        num_cols: int = (num_images // rowElement) + (num_images % rowElement != 0)
         
+        fig1, axes1 = plt.subplots(rowElement, num_cols, figsize=(10, 12))
+        fig1.suptitle(f"Images index {index}")
+        
+        for idx in range(num_images):
+            row: int = idx % rowElement
+            col: int = idx // rowElement
+            
             # Estrazione dell'immagine (13 canali)
-            image = x[idx*13:(idx+1)*13, :, :]
+            image = x[idx * 13:(idx + 1) * 13, :, :]
             red, green, blue = image[2], image[1], image[0]
             rgb_image = torch.stack([red, green, blue], dim=0).permute(1, 2, 0).numpy()
 
-           
-            ax = axes[row, col]
+            ax = axes1[row, col]
             ax.imshow(rgb_image)
-            #ax.set_title(f"Image {i+1} RGB")
+            ax.set_title(f"Image {idx+1}")
             ax.axis('off')
-            
-            row += 1
-            idx += 1
-            
-            if row == rowElement:
-                row = 0
-                col += 1
-                
-            
         
-        if (num_images % rowElement != 0):       
-            col += 1
         
-        for i in range(8):
-           
-            # 2. Mappa etichetta `y`
-            ax = axes[i, col]
-            ax.imshow(label_map, cmap='tab20')
-            #ax.set_title(f"Label {i+1}")
-            ax.axis('off')
-            
-            # 3. Mappa predizioni `y_hat`
-            ax = axes[i, col + 1]
-            ax.imshow(pred_map, cmap='tab20')
-            #ax.set_title(f"Pred. {i+1}")
-            ax.axis('off')
-            
-            # 4. Mappa della loss
-            # ax = axes[3, i]
-            # ax.imshow(loss_map, cmap='hot')
-            # ax.set_title(f"Loss {i+1}")
-            # ax.axis('off')
+        # Crea una colormap personalizzata
+        color_list = [color for _, color in sorted(Munich480_DataModule._MAP_COLORS.items())]
+        cmap = ListedColormap(color_list)
+        
+        label_map = y.argmax(dim=0).numpy()         # Etichetta per l'immagine corrente
+        pred_map = y_hat.argmax(dim=0).numpy()      # Predizione con massimo di ciascun layer di `y_hat`
+        
+        fig2, axes2 = plt.subplots(1, 2, figsize=(10, 5))
+        fig2.suptitle("Feature Maps: Label Map and Prediction Map")
+        
+            # Mappa etichetta `y`
+        axes2[0].imshow(label_map, cmap=cmap)
+        axes2[0].set_title("Label Map")
+        axes2[0].axis('off')
+        
+        # Mappa predizione `y_hat`
+        axes2[1].imshow(pred_map, cmap=cmap)
+        axes2[1].set_title("Prediction Map")
+        axes2[1].axis('off')
+        
+        # Aggiungi legenda accanto alla seconda figura
+        legend_patches = [mpatches.Patch(color=Munich480_DataModule._MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in self._classesMapping.items()]
+        fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper right', title="Class Colors")
 
-        plt.tight_layout()
+        fig1.subplots_adjust(right=0.8)
+        fig2.subplots_adjust(right=0.7)
+        
+        fig1.tight_layout(pad=2.0)
         plt.show()
+        
+        
+        # for i in range(8):
+           
+        #     # 2. Mappa etichetta `y`
+        #     ax = axes[i, col]
+        #     ax.imshow(label_map, cmap=cmap)
+        #     #ax.set_title(f"Label {i+1}")
+        #     ax.axis('off')
+            
+        #     # 3. Mappa predizioni `y_hat`
+        #     ax = axes[i, col + 1]
+        #     ax.imshow(pred_map, cmap=cmap)
+        #     #ax.set_title(f"Pred. {i+1}")
+        #     ax.axis('off')
+            
+        #     # 4. Mappa della loss
+        #     # ax = axes[3, i]
+        #     # ax.imshow(loss_map, cmap='hot')
+        #     # ax.set_title(f"Loss {i+1}")
+        #     # ax.axis('off')
+            
+        # # Aggiungi la legenda con la corrispondenza colore-categoria
+        # legend_patches = [mpatches.Patch(color=Munich480_DataModule._MAP_COLORS[cls], label=f'{label}') for cls, label in self._classesMapping.items()]#for cls, color in Munich480_DataModule._MAP_COLORS.items()]
+        # plt.legend(handles=legend_patches, bbox_to_anchor=(1.2, 0.5), loc='upper left', borderaxespad=0.)
+
+        # plt.tight_layout(pad=1.0)
+        # plt.subplots_adjust(right=0.50)
+        # plt.show()
         
         
         

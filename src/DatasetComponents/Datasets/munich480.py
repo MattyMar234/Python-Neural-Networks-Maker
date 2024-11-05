@@ -28,12 +28,11 @@ class Munich480(Segmentation_Dataset_Base):
     _EVAL_TILEIDS_FOLDER = os.path.join("tileids","val_folders.txt")
     _TRAIN_TILEIDS_FOLDER = os.path.join("tileids", "train_folders.txt")
     _TEST_TILEIDS_FOLDER = os.path.join("tileids", "test_folders.txt")
-    _CLASSES_FILE = "classes.txt"
     
     _semaphore = asyncio.Semaphore(10)
     _classLock = Lock()
     _stack_axis: int = 1
-    _classesMapping: dict = dict()
+    
     _dataInitialized: bool = False
     
     TemporalSize: Final[int] = 32
@@ -59,26 +58,10 @@ class Munich480(Segmentation_Dataset_Base):
         
     
     
-    @staticmethod
-    def _init_shared_data(datasetFolder: str) -> None: 
-        with Munich480._classLock:
-            if Munich480._dataInitialized:
-                return
-            
-            Munich480._read_classes(folder = datasetFolder)
-            Munich480._dataInitialized = True
-            print(Munich480._classesMapping)
     
-    @staticmethod
-    def _read_classes(folder: str) -> None:
-        with open(os.path.join(folder, Munich480._CLASSES_FILE), 'r') as f:
-            classes = f.readlines()
-
-        for row in classes:
-            row = row.replace("\n", "")
-            if '|' in row:
-                id, cl = row.split('|')
-                Munich480._classesMapping[int(id)] = cl
+    
+    
+    
     
     @lru_cache(maxsize=27)
     @staticmethod
@@ -91,7 +74,7 @@ class Munich480(Segmentation_Dataset_Base):
 
 
     def __new__(cls, folder, *args, **kwargs):
-        cls._init_shared_data(datasetFolder=folder)
+        #cls._init_shared_data(datasetFolder=folder)
         return super().__new__(cls)
            
   

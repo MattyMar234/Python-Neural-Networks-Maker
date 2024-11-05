@@ -58,6 +58,9 @@ def main(args: argparse.Namespace | None) -> None:
         `torch.set_float32_matmul_precision('medium' | 'high')` which will 
         trade-off precision for performance. 
         For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision"""
+    
+    
+    
      
     datamodule: DataModuleBase = Munich480_DataModule(
         datasetFolder = "/dataset/munich480",
@@ -105,57 +108,9 @@ def main(args: argparse.Namespace | None) -> None:
     
     
    
+
     
     
-    
-    # checkpoint = torch.load(args.ckpt_path, weights_only=True)
-    # UNET_model.load_state_dict(checkpoint["state_dict"])
-    # UNET_model.eval()
-    
-    # with torch.no_grad():
-        
-    #     x, y = TEST_DATASET[0]
-        
-    #     print(x.shape)
-        
-    #     index = 4*20
-        
-        
-    #     x_rgb = x[index:3 + index, :, :].permute(1, 2, 0) * 255  # Forma: [48, 48, 3]
-    #     y_hat = UNET_model(x.unsqueeze(0))
-        
-    #     print(y_hat.shape, y.shape)
-    #     y_hat_classes = torch.argmax(y_hat, dim=1).squeeze(0)  # Forma: [48, 48]
-    #     mask = y_hat_classes.cpu().numpy()
-    #     cmap = plt.get_cmap('tab20', 27)
-    #     mask_rgb = cmap(mask)[:, :, :3]  # Ottieni i colori per ogni classe
-    #     mask_rgb = (mask_rgb * 255).astype('uint8')  # Convertilo a uint8
-    #     mask_alpha = (mask > 0).astype('float32')  # Imposta l'alpha in base alla maschera
-    #     #print(y_hat.squeeze(0))
-        
-    #     overlay = (mask_rgb * mask_alpha[:, :, None]) / 255.0  # Sovrapposizione
-
-    #     combined = (x_rgb / 255.0) * (1 - mask_alpha[:, :, None]) + overlay
-
-    #     # Visualizza l'immagine combinata
-    #     plt.imshow(combined)
-    #     plt.title('Image with Segmentation Overlay')
-    #     plt.axis('off')
-    #     plt.show()
-
-
-        # # Visualizza y e y_hat_classes
-        # fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-
-        # # Visualizza la classe reale
-        # ax[0].imshow(y, cmap=cmap)  # o usa cmap se y ha più classi
-        # ax[0].set_title('Ground Truth')
-        # ax[0].axis('off')
-
-        # # Visualizza la classe predetta
-        # ax[1].imshow(y_hat_classes.cpu().numpy(), cmap=cmap)  # Usa la mappa di colori
-        # ax[1].set_title('Predicted')
-        # ax[1].axis('off')
 
         
     
@@ -212,14 +167,17 @@ def main(args: argparse.Namespace | None) -> None:
         
         
         with torch.no_grad():
-            for index in range(len(dataset)):
-                x, y = dataset[index]
-                x = x.to(device)
-     
-                y_hat = UNET_2D_Model(x.unsqueeze(0))
-                
-                datamodule.show_processed_sample(x, y_hat, y)
-                return
+            idx: int = 0
+            
+            if args.idx:
+                idx = args.idx % len(dataset)
+            
+            x, y = dataset[idx]
+            x = x.to(device)
+    
+            y_hat = UNET_2D_Model(x.unsqueeze(0))
+            
+            datamodule.show_processed_sample(x, y_hat, y, idx)
     
     
     #networkManager.lightTestNetwork(testDataset=TEST_DATASET)
@@ -241,9 +199,10 @@ if __name__ == "__main__":
     parser.add_argument('-w', '--workers',     type=int,   default=0)
     parser.add_argument('-d', '--gpu_or_cpu',  type=str,   default='gpu',          choices=['gpu', 'cpu'])
     parser.add_argument('--gpus',              type=int,   default=[0],            nargs='+')
-    parser.add_argument('--test' ,    action='store_true')
-    parser.add_argument('--train', action='store_true')
-    parser.add_argument('--compile',  action='store_true')
+    parser.add_argument('--idx',               type=int,  default=0)
+    parser.add_argument('--test' ,      action='store_true')
+    parser.add_argument('--train',      action='store_true')
+    parser.add_argument('--compile',    action='store_true')
 
     #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0 --ckpt_path /app/Models/UNET_2D/checkpoints/epoch=9-avg_val_loss=0.43453678.ckpt
      #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0
