@@ -13,6 +13,7 @@ from Database.DatabaseConnectionParametre import DatabaseParametre
 from Database.Tables import *
 
 from DatasetComponents.Datasets.munich480 import Munich480
+from Networks.NetworkComponents.ImageSegmentationModels import UNET_2D
 from Networks.NetworkFactory import *
 from Networks.NetworkManager import *
 from Networks.NetworkComponents.TrainingModel import *
@@ -47,17 +48,19 @@ def main(args: argparse.Namespace | None) -> None:
     check_pytorch_cuda()
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    deviceName = torch.cuda.get_device_name(device=None)
-    
-    if device.type == 'cuda' and deviceName == 'NVIDIA GeForce RTX 3060 Ti':
-        print(f"set float32 matmul precision to \'medium\'")
-        torch.set_float32_matmul_precision('medium')
+
+    if device == "cuda" :
+        deviceName = torch.cuda.get_device_name(device=None)
         
-        """You are using a CUDA device ('NVIDIA GeForce RTX 3060 Ti') that 
-        has Tensor Cores. To properly utilize them, you should set 
-        `torch.set_float32_matmul_precision('medium' | 'high')` which will 
-        trade-off precision for performance. 
-        For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision"""
+        if device.type == 'cuda' and deviceName == 'NVIDIA GeForce RTX 3060 Ti':
+            print(f"set float32 matmul precision to \'medium\'")
+            torch.set_float32_matmul_precision('medium')
+            
+            """You are using a CUDA device ('NVIDIA GeForce RTX 3060 Ti') that 
+            has Tensor Cores. To properly utilize them, you should set 
+            `torch.set_float32_matmul_precision('medium' | 'high')` which will 
+            trade-off precision for performance. 
+            For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision"""
     
     
     
@@ -160,7 +163,7 @@ def main(args: argparse.Namespace | None) -> None:
         dataloader: DataLoader = datamodule.test_dataloader()#datamodule.test_dataloader()
         dataset = dataloader.dataset
         
-        checkpoint = torch.load(args.ckpt_path)
+        checkpoint = torch.load(args.ckpt_path, map_location=torch.device(device))
         UNET_2D_Model.load_state_dict(checkpoint["state_dict"])
         UNET_2D_Model.to(device)
         UNET_2D_Model.eval()

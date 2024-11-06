@@ -67,8 +67,14 @@ class Munich480_DataModule(DataModuleBase):
         self._pin_memory: bool = True
         self._useTemporalSize = useTemporalSize
         self._total_channel = 0
+        self._prefetch_factor: int | None = 1
         
         self._classesMapping: dict = {}
+        
+        if self._num_workers == 0:
+            self._persistent_workers = False
+            self._pin_memory = False
+            self._prefetch_factor = None
         
         
         
@@ -136,13 +142,13 @@ class Munich480_DataModule(DataModuleBase):
 
 
     def train_dataloader(self) -> DataLoader:
-        return DataLoader(self._TRAIN, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=True, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True, prefetch_factor=1)
+        return DataLoader(self._TRAIN, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=True, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
 
     def val_dataloader(self) -> DataLoader:
-        return DataLoader(self._VAL, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True, prefetch_factor=1)
+        return DataLoader(self._VAL, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
 
     def test_dataloader(self) -> DataLoader:
-        return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=(self._persistent_workers and (self._num_workers > 0)), drop_last=True, prefetch_factor=1)
+        return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
     
     
     def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, X_as_Int: bool = False) -> None:
