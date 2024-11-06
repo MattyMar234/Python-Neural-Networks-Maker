@@ -216,14 +216,17 @@ if __name__ == "__main__":
     if '--help' in sys.argv or '-help' in sys.argv or '-h' in sys.argv:
         parser.print_help()
         sys.exit(0)
-        
     
     args = parser.parse_args()
+    
     
     if not args.test and not args.train:
         print("Please specify either --test or --train")
         sys.exit(1)
     
+    if args.test and args.ckpt_path == None:
+        print("Please specify checkpoint path with --ckpt_path")
+        sys.exit(1)
     #print(type(args))
     
     main(args)
