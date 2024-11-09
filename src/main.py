@@ -213,6 +213,8 @@ if __name__ == "__main__":
     # parser.add_argument("--devices", type=int, default=0)
     # parser.add_argument("--epochs", type=int, default=1)
     
+    # sudo -E python main.py --test --ckpt_path /app/Models/UNET_2D/checkpoints/last.ckpt --idx 2002
+    
     if '--help' in sys.argv or '-help' in sys.argv or '-h' in sys.argv:
         parser.print_help()
         sys.exit(0)
