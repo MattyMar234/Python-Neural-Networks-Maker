@@ -1,8 +1,8 @@
 import torch.nn as nn
 
 from enum import IntEnum, auto
-from Networks.NetworkComponents.ConvolutionalsModels import *
-from Networks.NetworkComponents.ImageSegmentationModels import *
+from Networks.Architettures.ConvolutionalModels.ConvolutionalsModels import *
+from Networks.Architettures.SemanticSegmentation.UNet import UNET_2D
 from Networks.NetworkComponents.TrainingModel import *
 
     

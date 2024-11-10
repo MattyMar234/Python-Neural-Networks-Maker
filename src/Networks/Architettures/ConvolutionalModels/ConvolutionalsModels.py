@@ -13,8 +13,6 @@ from Networks.NetworkComponents.NeuralNetworkBase import *
 
 
     
-   
-
 
 class LaNet5_ReLU(ModelBase):
     def __init__(self, in_channel, num_classes=10):

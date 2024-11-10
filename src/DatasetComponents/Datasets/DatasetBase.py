@@ -38,8 +38,13 @@ class DatasetBase(Dataset):
 
 
     def __getitem__(self, idx: int) -> torch.Tensor:
-        item = self._getItem(idx)
-        return self.adjustData(item) 
+        itemDict = self._getItem(idx)
+        itemDict = self.on_apply_transforms(itemDict)
+        itemDict = self.adjustData(itemDict)
+        return  itemDict['x'], itemDict['y']
+    
+    def getItems(self, idx: int) -> Dict[str,any]:
+        return self.__getitem__(idx)
     
     def __len__(self) -> int:
         if self._DatasetSize is None:
@@ -47,14 +52,14 @@ class DatasetBase(Dataset):
         return self._DatasetSize
     
     @lru_cache(maxsize=None)  # Decoratore per memorizzare i risultati calcolati
-    def _one_hot_encode(self, labels: any):
+    def _one_hot_encode(self, labels: torch.tensor) -> torch.tensor:
         # if n > self._classesCount:
         #     raise IndexError("Index out of range")
             
         # one_hot= np.zeros(self._classesCount, dtype=np.float32)
         # one_hot[int(n)] = 1.0
         # return one_hot
-        labels_tensor = torch.tensor(labels, dtype=torch.long)
+        labels_tensor = torch.tensor(labels.clone().detach(), dtype=torch.long)
         one_hot = torch.nn.functional.one_hot(labels_tensor, num_classes=self._classesCount)
         return one_hot
     
@@ -76,8 +81,12 @@ class DatasetBase(Dataset):
         pass
     
     @abstractmethod
-    def adjustData(self, sample: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        return sample
+    def adjustData(self, items: dict[str, any]) -> dict[str, any]:
+        return items
+    
+    @abstractmethod
+    def on_apply_transforms(self, items: dict[str, any]) -> dict[str, any]:
+        ...
     
     @staticmethod
     def _FormatResult(func):

@@ -26,17 +26,21 @@ class DataModuleBase(pl.LightningDataModule):
             
         opendatasets.download(dataset_id_or_url=url, data_dir=folder)
       
+    @property 
     @abstractmethod  
-    def number_of_classes(self) -> int:
-        ...
-        
-    @abstractmethod  
-    def input_size(self) -> list[int]:
+    def output_classes(self) -> int:
         ...
     
+    @property
     @abstractmethod 
-    def number_of_channels(self) -> int:
+    def input_channels(self) -> int:
         ...
+        
+    @property  
+    @abstractmethod  
+    def input_size(self) -> list[int] | None:
+        return None
+    
 
     @abstractmethod
     def prepare_data(self) -> None:

@@ -28,10 +28,12 @@ class TraingBase(LightModelBase):
     AVG_TRAINING_LOSS_LABEL_NAME: Final[str] = "avg_train_loss"
     AVG_VALIDATION_LOSS_LABEL_NAME: Final[str] = "avg_val_loss"
     VAL_ACCURACY_LABEL_NAME: Final[str] = "val_accuracy"
+    LR_LABEL_NAME: Final[str] = "learning_rate"
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
+        self._kwargs = kwargs
         self._learning_rate: float = kwargs['lr']
         
         if self._learning_rate is None or (self._learning_rate > 1 or self._learning_rate < 0):
@@ -41,38 +43,37 @@ class TraingBase(LightModelBase):
         #self.save_hyperparameters(ignore=['net'])
         
         
-        self._lossFunction = nn.CrossEntropyLoss()
+        self._lossFunction = self.configure_loss()
         self.train_loss_metric = torchmetrics.MeanMetric()
         self.val_loss_metric = torchmetrics.MeanMetric()
         self.val_accuracy_metric = torchmetrics.Accuracy(task="multiclass", num_classes=self._output_Classes)
-        
+    
+        self._last_avg_trainLoss: float = -1.0
+        self._last_avg_valLoss: float = -1.0
+    
+    
+    @abstractmethod  
     def _commonStep(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
         #y_hat = self.__net(x)
         y_hat = self.forward(x)
         loss = self._lossFunction(y_hat, y.squeeze(1))
         return {"loss": loss, "y_hat": y_hat}
+    
+    @abstractmethod
+    def configure_loss(self) -> nn.Module:
+        return nn.CrossEntropyLoss()
 
 
     @abstractmethod
-    def configure_optimizers(self) -> any:
+    def configure_optimizers(self) -> tuple[list, list]:
         ...
-
-
-class ImageClassificationBase(TraingBase):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
         
-            
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
-        scheduler = {
-            'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1),
-            'interval': 'epoch',
-        }
-        return [optimizer], [scheduler]
-    
+    @abstractmethod
+    def compute_accuracy_metric(self, values: dict, batch_imgs, batch_labels) -> None :
+        self.val_accuracy_metric(values['y_hat'], batch_labels)
+        
     #================================== STEPS ==================================#
-    def training_step(self, batch: torch.Tensor, batch_idx: int):
+    def training_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int):
         batch_imgs, batch_labels = batch
         values = self._commonStep(batch_imgs, batch_labels, batch_idx)
         
@@ -80,45 +81,40 @@ class ImageClassificationBase(TraingBase):
         #self.log_dict(values, on_step=True, on_epoch=False, prog_bar=True)
         return values
     
- 
     
-    
-    def validation_step(self, batch: torch.Tensor, batch_idx: int):
+    def validation_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int):
         batch_imgs, batch_labels = batch
         values = self._commonStep(batch_imgs, batch_labels, batch_idx)
         
         self.val_loss_metric.update(values['loss'])
-        self.val_accuracy_metric(values['y_hat'], batch_labels)
-        
+        self.compute_accuracy_metric(values, batch_imgs, batch_labels.squeeze(1))
         return values
     
-    
+    def test_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int):
+        return self._commonStep(batch[0], batch[1], batch_idx)
+
+
     def predict_step(self, batch: torch.Tensor, batch_idx: int):
         batch_imgs, batch_labels = batch
         outputs = self.__net(batch_imgs)
         preds = torch.argmax(outputs, dim=1)
         return preds
     
-    
-    def test_step(self, batch: torch.Tensor, batch_idx: int):
-        batch_imgs, batch_labels = batch
-        return self._commonStep(batch_imgs, batch_labels, batch_idx)
-
     #================================== EPOCHS ==================================#
     def on_train_epoch_end(self):
         
-        avg_train_loss = self.train_loss_metric.compute()
+        self._last_avg_trainLoss = self.train_loss_metric.compute()
         self.train_loss_metric.reset()
         
         
         t_dict = {
-            TraingBase.AVG_TRAINING_LOSS_LABEL_NAME : avg_train_loss,
+            TraingBase.AVG_TRAINING_LOSS_LABEL_NAME : self._last_avg_trainLoss,
         }
         
         self.log_dict(t_dict, on_epoch=True, prog_bar=True)
 
     def on_validation_epoch_end(self):
-        avg_val_loss = self.val_loss_metric.compute()
+        self._last_avg_valLoss = self.val_loss_metric.compute()
         val_acc = self.val_accuracy_metric.compute()
         
         self.val_loss_metric.reset()
@@ -126,39 +122,37 @@ class ImageClassificationBase(TraingBase):
         
 
         t_dict = {
-            TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME : avg_val_loss,
+            TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME : self._last_avg_valLoss,
             TraingBase.VAL_ACCURACY_LABEL_NAME : val_acc,
-            'learning_rate': self.lr_schedulers().get_last_lr()[0]  # Ottieni il learning rate attuale
+            TraingBase.LR_LABEL_NAME: self.lr_schedulers().get_last_lr()[0]  # Ottieni il learning rate attuale
         }
         
         self.log_dict(t_dict, on_epoch=True, prog_bar=True)
-        
-        
     
-   
-
-    # def on_test_epoch_end(self, outputs):
-    #     pass
-    
-    # def on_train_epoch_start(self, outputs):
-    #     pass
-        
-    # def on_validation_epoch_start(self, outputs):
-    #     pass
-    
-    # def on_test_epoch_start(self, outputs):
-    #     pass
-    
-    #================================== METRICS ==================================#
-
     def save_epoch_metrics(self):
         pass
 
-class ImageSegmentation_TrainingBase(ImageClassificationBase):
+
+class ImageClassificationBase(TraingBase):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+            
+    def configure_optimizers(self) -> tuple[list, list] :
+        optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
+        scheduler = {
+            'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1),
+            'interval': 'epoch',
+        }
+        return [optimizer], [scheduler]
+    
+
+
+class Semantic_ImageSegmentation_TrainingBase(TraingBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> tuple[list, list]:
         optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
         scheduler = {
             'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5),
@@ -166,39 +160,23 @@ class ImageSegmentation_TrainingBase(ImageClassificationBase):
         }
         return [optimizer], [scheduler]
     
+    def configure_loss(self) -> nn.Module:
+        
+        if self._kwargs['output_Classes'] == 1:
+            return nn.BCELoss()
+        else:
+            #return nn.NLLLoss()
+            return nn.CrossEntropyLoss()
     
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        return self._commonStep(batch[0], batch[1], dataloader_idx)
-     
-     
-     
-     
-        
-
-
-# class LightTrainerModel_ImageClassification(_ImageClassificationBase):
-#     def __init__(self, net: nn.Module = None, lr: float = 1e-3):
-#         #L.LightningModule.__init__(self)
-#         _ImageClassificationBase.__init__(self, net, lr)
-        
-#     # def training_step(self, batch: torch.Tensor, batch_idx: int):
-#     #     values = _ImageClassificationBase.training_step(self, batch, batch_idx)
-#     #     self.log_dict(values, prog_bar=True, on_step=False, on_epoch=True)#,reduce_fx="mean")
-#     #     return values
-
-
-#     # def validation_step(self, batch: torch.Tensor, batch_idx: int):
-#     #     values = _ImageClassificationBase.validation_step(self, batch, batch_idx)
-#     #     self.log_dict(values, on_step=True, on_epoch=True)#, batch_size=self.trainer.num_val_batches)
-#     #     return values
-
     
-#     def test_step(self, batch: torch.Tensor, batch_idx: int):
-#         values = _ImageClassificationBase.test_step(self, batch, batch_idx)
-#         self.log_dict(values, on_step=True, on_epoch=True, batch_size=self.trainer.datamodule.batch_size)
-#         return values
-
+     
+     
+     
+     
         
+
+
+
         
         
     

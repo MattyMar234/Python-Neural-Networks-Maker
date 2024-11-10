@@ -32,8 +32,7 @@ class Munich480(Segmentation_Dataset_Base):
     _semaphore = asyncio.Semaphore(10)
     _classLock = Lock()
     _stack_axis: int = 1
-    
-    _dataInitialized: bool = False
+
     
     TemporalSize: Final[int] = 32
     ImageChannels: Final[np.array] = np.array([4,6,3])
@@ -43,7 +42,7 @@ class Munich480(Segmentation_Dataset_Base):
     
     
     
-    class DataType(Enum):
+    class DatasetMode(Enum):
         TRAINING = auto()
         TEST = auto()
         VALIDATION = auto()
@@ -58,51 +57,23 @@ class Munich480(Segmentation_Dataset_Base):
         Y2017 = auto()
         
     
-    
-    
-    
-    
-    
-    
-    @lru_cache(maxsize=27)
-    @staticmethod
-    def mapClassValue(index: int) -> str:
-        assert index < 27 and index >= 0, "Index out of range"
-        assert Munich480._dataInitialized, "Classes not initialized"
-        return Munich480._classesMapping[index]
-    
-
-
 
     def __new__(cls, folder, *args, **kwargs):
         #cls._init_shared_data(datasetFolder=folder)
         return super().__new__(cls)
            
   
-    def __init__(self, folderPath:str | None, mode: DataType, year: Year, distance: Distance, transforms, useTemporalSize: bool = False):
+    def __init__(self, folderPath:str | None, mode: DatasetMode, year: Year, transforms, useTemporalSize: bool = False):
         
-        assert type(mode) == Munich480.DataType, "Invalid mode type"
+        assert type(mode) == Munich480.DatasetMode, "Invalid mode type"
         assert type(year) == Munich480.Year, "Invalid year type"
-        assert type(distance) == Munich480.Distance, "Invalid distance type"
         
-        total_channel = 0
-        
-        if Munich480.Distance.m10 in distance:
-            total_channel += Munich480.ImageChannels[0]
-        if Munich480.Distance.m20 in distance:
-            total_channel += Munich480.ImageChannels[1]
-        if Munich480.Distance.m60 in distance:
-            total_channel += Munich480.ImageChannels[2]
-        
-        self._total_channels = total_channel#Munich480ImageChannels * Munich480._TemporalSize * temp_count
+        self._total_channels = Munich480.ImageChannelsCount
             
-        if not useTemporalSize:
-            total_channel *= Munich480.TemporalSize
-        
         
         Segmentation_Dataset_Base.__init__(
             self, 
-            imageSize = (Munich480.ImageWidth, Munich480.ImageHeight, total_channel, Munich480.TemporalSize if not useTemporalSize else 0), 
+            imageSize = (Munich480.ImageWidth, Munich480.ImageHeight, self._total_channels, Munich480.TemporalSize if not useTemporalSize else 0), 
             classesCount = 27, 
             x_transform=transforms,
             y_transform = transforms,
@@ -112,17 +83,17 @@ class Munich480(Segmentation_Dataset_Base):
         
         self._folderPath:str | None = folderPath
         self._years: Munich480.Year = year
-        self._distance: Munich480.Distance = distance
         self._useTemporalSize: bool = useTemporalSize
+        self._temporalSize = Munich480.TemporalSize*len(self._years)
         
         match mode:
-            case Munich480.DataType.TRAINING:
+            case Munich480.DatasetMode.TRAINING:
                 self._dataSequenze = np.loadtxt(os.path.join(self._folderPath,Munich480._TRAIN_TILEIDS_FOLDER), dtype=int)
                 
-            case Munich480.DataType.TEST:
+            case Munich480.DatasetMode.TEST:
                 self._dataSequenze = np.loadtxt(os.path.join(self._folderPath, Munich480._TEST_TILEIDS_FOLDER), dtype=int)
                 
-            case Munich480.DataType.VALIDATION:
+            case Munich480.DatasetMode.VALIDATION:
                 self._dataSequenze = np.loadtxt(os.path.join(self._folderPath, Munich480._EVAL_TILEIDS_FOLDER), dtype=int)
                 
         
@@ -159,29 +130,44 @@ class Munich480(Segmentation_Dataset_Base):
         return dates
     
     
-    def _normalize_dif_data(self, data: np.array) -> np.array:
+    def _normalize_dif_data(self, data: np.array, profile) -> np.array:
         # """Normalizza i dati tra 0 e 255."""
         # return ((data - np.min(data)) / (np.max(data) - np.min(data)) * 255).astype(np.uint8)
-        return data.astype(np.float32) * 1e-4
+        data = data.astype(np.float32)
+        
+        match(profile['dtype']):
+            case "uint8":
+                return data / 255.0
+
+            case "uint16":
+                return data / 65535.0
+            
+            case "uint32":
+                return data / 4294967295.0
+        
+            case _ :
+                raise Exception(f"Invalid data type {profile['dtype']}")
     
-    def _load_dif_file(self, filePath:str, normalize: bool = True) -> np.array:
+    
+    def _load_dif_file(self, filePath:str, normalize: bool = True) -> Dict[str,any]:
         #async with Munich480._semaphore:
         with rasterio.open(filePath) as src:
             data = src.read()
+            profile = src.profile
             
-            if normalize:
-                return self._normalize_dif_data(data)
-            return data
+        if normalize:
+            data = self._normalize_dif_data(data = data, profile = profile)
+        return {"data" : data, "profile" : profile}
                 
         
     def _load_y(self, folder:str):
-        return self._load_dif_file(filePath=os.path.join(folder, "y.tif"), normalize = False)
+        return self._load_dif_file(filePath=os.path.join(folder, "y.tif"), normalize = False)["data"]
         
         
-    def _load_year_sequenze(self, year: str, number: str):
+    def _load_year_sequenze(self, year: str, number: str) -> dict[str, any]:
         sequenzeFolder = os.path.join(self._folderPath, year, str(number))
         dates = self.get_dates(path=sequenzeFolder, sample_number=Munich480.TemporalSize)
-
+        profile = None
         #torch.empty
         x: torch.Tensor = torch.empty((Munich480.TemporalSize, self._total_channels, Munich480.ImageHeight, Munich480.ImageWidth), dtype=torch.float32)
         
@@ -198,83 +184,36 @@ class Munich480(Segmentation_Dataset_Base):
 
             # Carica i dati per ciascuna distanza selezionata
             for distance, suffix in distance_map.items():
-                if distance in self._distance:
-                    data = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}{suffix}"))
-                    tensor = torch.from_numpy(data).unsqueeze(0)  # Aggiungi dimensione per l'interpolazione
+                #if distance in self._distance:
+                DataDict = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}{suffix}"))
+                data = DataDict['data']
+                
+                if profile is None:
+                    profile = DataDict["profile"]
+                
+                tensor = torch.from_numpy(data).unsqueeze(0)  # Aggiungi dimensione per l'interpolazione
+                
+                if distance != Munich480.Distance.m10:
                     tensor = F.interpolate(tensor, size=(Munich480.ImageHeight, Munich480.ImageWidth))
-                    num_channels = tensor.size(1)
-                    
-                    # Assegna il tensor ai canali specifici per il timestamp t
-                    x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor.squeeze(0)
-                    current_channel_index += num_channels  # Aggiorna l'indice dei canali
+                
+                num_channels = tensor.size(1)
+                
+                # Assegna il tensor ai canali specifici per il timestamp t
+                x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor.squeeze(0)
+                current_channel_index += num_channels  # Aggiorna l'indice dei canali
 
         # Carica la maschera di segmentazione
         y = self._load_y(sequenzeFolder)
-        return x, y
+        return {"x": x, "y": y, "profile": profile}
     
-    # def _load_year_sequenze(self, year: str, number: str):
-    #     sequenzeFolder = os.path.join(self._folderPath, year, str(number))
-    #     dates = self.get_dates(path=sequenzeFolder, sample_number=Munich480.TemporalSize)
-
-    #     #torch.empty
-    #     x: torch.Tensor = torch.empty((Munich480.TemporalSize, Munich480.ImageChannels.sum(), Munich480.ImageHeight, Munich480.ImageWidth), dtype=torch.float32)
-    #     current_channel_index: int = 0
-
-    #     #print(x.shape)
-
-    #     for t, date in enumerate(dates):
-    #         current_channel_index = 0
-            
-    #         #print(f"temporale instance {t}: {date}")
-
-    #         if Munich480.Distance.m10 in self._distance:
-    #             data = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_10m.tif"))
-    #             tensor = torch.from_numpy(data) 
-    #             tensor = F.interpolate(tensor.unsqueeze(0), size=(Munich480.ImageHeight, Munich480.ImageWidth))
-    #             num_channels = tensor.size(1)
-                
-    #             # torch.set_printoptions(profile="full")
-    #             # torch.set_printoptions(linewidth=200)
-    #             # print("prima: ", x[0, 0:5])
-                
-    #             # print(f"x10 aded in: [{t},{current_channel_index}:{current_channel_index + num_channels}]")
-    #             x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor  # Assegna i canali
-    #             current_channel_index += num_channels  
-                
-    #             # print("dopo: ", x[0, 0:5])
-    #             # os._exit(0)
-
-    #         if Munich480.Distance.m20 in self._distance:
-    #             data = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_20m.tif"))
-    #             tensor = torch.from_numpy(data)  
-    #             tensor = F.interpolate(tensor.unsqueeze(0), size=(Munich480.ImageHeight, Munich480.ImageWidth))
-    #             num_channels = tensor.size(1)  
-                
-    #             #print(f"x20 aded in: [{t},{current_channel_index}:{current_channel_index + num_channels}]")
-    #             x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor  # Assegna i canali
-    #             current_channel_index += num_channels  
-                
-
-    #         if Munich480.Distance.m60 in self._distance:
-    #             data = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_60m.tif"))
-    #             tensor = torch.from_numpy(data)  
-    #             tensor = F.interpolate(tensor.unsqueeze(0), size=(Munich480.ImageHeight, Munich480.ImageWidth))
-    #             num_channels = tensor.size(1)  
-                
-    #             #print(f"x60 aded in: [{t},{current_channel_index}:{current_channel_index + num_channels}]")
-    #             x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor  # Assegna i canali
-    #             current_channel_index += num_channels  
-                        
-    #     y = self._load_y(sequenzeFolder)
-    #     return x, y
-    
+   
     
         
                 
     def _getSize(self) -> int:
         return np.size(self._dataSequenze)        
 
-    def _load_data(self, idx: int):
+    def _load_data(self, idx: int) -> Dict[str, any]:
         
         if Munich480.Year.Y2016 in self._years and not (Munich480.Year.Y2017 in self._years):
             return self._load_year_sequenze("data16", str(idx))
@@ -283,57 +222,90 @@ class Munich480(Segmentation_Dataset_Base):
             return self._load_year_sequenze("data17", str(idx))
         
         else:
-        
-            x16: torch.Tensor | None = None
-            x17: torch.Tensor | None = None
-            y16: torch.Tensor | None = None
-            y17: torch.Tensor | None = None
-        
-       
-            x16, y16 = self._load_year_sequenze("data16", str(idx))
-            x17, _ = self._load_year_sequenze("data17", str(idx))
+            x16_dict = self._load_year_sequenze("data16", str(idx))
+            x17_dict = self._load_year_sequenze("data17", str(idx))
             
-            return torch.cat((x16, x17)), y16
+            return {"x":torch.cat((x16_dict["x"], x17_dict["x"])), "y":x16_dict["y"], "profile" : x16_dict["profile"]}
 
-    @DatasetBase._FormatResult
-    def _getItem(self, idx: int) -> any:
+    def _getItem(self, idx: int) -> dict[str, any]:
         idx = self._mapIndex(idx)
     
         #x, y = asyncio.run(self._load_data(idx))
-        x, y = self._load_data(idx)
-        
+        dictData = self._load_data(idx)
+        x = dictData["x"]
+        y = dictData["y"]
+                
         if not self._useTemporalSize:
             x = x.view(-1, Munich480.ImageHeight, Munich480.ImageWidth)
-            x = x.permute(1, 2, 0)
+            #x = x.permute(1, 2, 0)
             # x = np.transpose(x, (1, 2, 0))
         else:
             # permute channels with time_series (t x c x h x w) -> (c x t x h x w)
             x = x.permute(1, 0, 2, 3)
         
         #y = torch.squeeze(y, dim=0)
+        #(1, 48, 48) -> (48, 48)
         y = np.squeeze(y, axis=0)
+        y = torch.from_numpy(y)
         
         #x = x.float()
-        #x = x / 255
-    
-        
+   
+        dictData['x'] = x
+        dictData['y'] = y
         
         #print(x.shape, y.shape) ---> torch.Size([48, 48, 832]) np.size(48, 48)
+        return dictData
+    
+    def on_apply_transforms(self, items: dict[str, any]) -> dict[str, any]:
         
-        return x, y 
+        x = items['x']
+        y = items['y']
+        
+        if self._x_transform is not None:
+            
+            y = y.unsqueeze(0)
+            
+            if self._useTemporalSize:
+                y = y.unsqueeze(0)
+            
+                y = y.repeat(13, 1, 1, 1)
+                
+                xy = torch.cat((x, y), dim=1)
+                xy = self._x_transform(xy)
+                
+                # Separare x e y dopo la trasformazione
+                x = xy[:, :self._temporalSize, :, :]  # I primi 32 canali vanno a x
+                y = xy[:, self._temporalSize:, :, :]  # I successivi 27 canali vanno a y
+
+
+                y = y[0, 0, :, :]
+            
+            else:
+                
+                xy = torch.cat((x, y), dim=0)
+                xy = self._x_transform(xy)
+
+                x = xy[:self._temporalSize*self._total_channels, :, :]
+                y = xy[self._temporalSize*self._total_channels:, :, :]
+
+                y = y[0, :, :]
+
+        
+        if self._oneHot:
+            y = torch.Tensor(self._one_hot_encode(y))
+        
+        y = y.float()
+        y = y.permute(2,0,1)# -> (c x h x w)
+
+        items['x'] = x
+        items['y'] = y
+        
+        
+        return items
             
     
-    def adjustData(self, sample: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
-        x, y = sample
-        y = y.permute(2,0,1)
-        y = y.float()
-        
-        # for i in range(y.shape[0]):
-        #     print(f"Layer{i}:{y[i]}")
-        
-        print(x)
-        
-        return x, y
+    def adjustData(self, items: dict[str, any]) -> dict[str, any]:
+        return items
             
         
     def show_sample(self, sample) -> None:

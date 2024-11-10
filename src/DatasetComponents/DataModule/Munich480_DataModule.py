@@ -42,7 +42,6 @@ class Munich480_DataModule(DataModuleBase):
     def __init__(
         self, 
         datasetFolder:str, 
-        distance: Munich480.Distance = Munich480.Distance.m10, 
         year: Munich480.Year = Munich480.Year.Y2016, 
         download: bool = False, 
         batch_size: int = 1, 
@@ -52,7 +51,6 @@ class Munich480_DataModule(DataModuleBase):
         super().__init__(datasetFolder, batch_size, num_workers)
 
         assert os.path.exists(datasetFolder), f"La cartella {datasetFolder} non esiste"
-        assert type(distance) == Munich480.Distance, f"distance deve essere di tipo Munich480.Distance"
         assert type(year) == Munich480.Year, f"year deve essere di tipo Munich480.Year"
         
         
@@ -61,12 +59,11 @@ class Munich480_DataModule(DataModuleBase):
         self._VAL: Munich480 | None = None
         self._TEST: Munich480 | None = None
         
-        self._distance = distance
         self._year = year
         self._persistent_workers: bool = True
         self._pin_memory: bool = True
         self._useTemporalSize = useTemporalSize
-        self._total_channel = 0
+        self._total_channel = 13
         self._prefetch_factor: int | None = 1
         
         self._classesMapping: dict = {}
@@ -76,39 +73,33 @@ class Munich480_DataModule(DataModuleBase):
             self._pin_memory = False
             self._prefetch_factor = None
         
-        
-        
-        
-        if Munich480.Distance.m10 in distance:
-            self._total_channel += Munich480_DataModule.ImageChannels[0]
-        if Munich480.Distance.m20 in distance:
-            self._total_channel += Munich480_DataModule.ImageChannels[1]
-        if Munich480.Distance.m60 in distance:
-            self._total_channel += Munich480_DataModule.ImageChannels[2]
             
         if not useTemporalSize:
             self._total_channel *= Munich480_DataModule.TemporalSize * (len(year))
         
         
         self._training_trasforms = transforms.Compose([
-            # transforms.RandomHorizontalFlip(),
-            # transforms.RandomVerticalFlip(),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.5),
             #transforms.RandomRotation(degrees=15, fill=(255, 255, 255)),
             #transforms.Resize((572, 572)),
-            transforms.ToTensor() 
+            #transforms.ToTensor() 
         ])
         
         self._test_trasforms = transforms.Compose([
             #transforms.Resize((572, 572)),
-            transforms.ToTensor()
+            #transforms.ToTensor()
         ])
-        
-    def number_of_channels(self) -> int:
+    
+    @property
+    def input_channels(self) -> int:
         return self._total_channel
     
-    def number_of_classes(self) -> int:
+    @property
+    def output_classes(self) -> int:
         return Munich480_DataModule.ClassesCount
-        
+    
+    @property    
     def input_size(self) -> list[int]:
         if self._useTemporalSize:
             return [1, Munich480_DataModule.TemporalSize, self._total_channel, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
@@ -135,9 +126,9 @@ class Munich480_DataModule(DataModuleBase):
         
         self._read_classes()
         
-        self._TRAIN = Munich480(self._datasetFolder, mode= Munich480.DataType.TRAINING, year= self._year, distance=self._distance, transforms=self._training_trasforms)
-        self._VAL   = Munich480(self._datasetFolder, mode= Munich480.DataType.VALIDATION, year= self._year, distance=self._distance, transforms=self._test_trasforms)
-        self._TEST  = Munich480(self._datasetFolder, mode= Munich480.DataType.TEST, year= self._year, distance=self._distance, transforms=self._test_trasforms)
+        self._TRAIN = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= self._year, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
+        self._VAL   = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.VALIDATION, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
+        self._TEST  = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TEST, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
 
 
 
@@ -151,7 +142,7 @@ class Munich480_DataModule(DataModuleBase):
         return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
     
     
-    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, X_as_Int: bool = False) -> None:
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, X_as_Int: bool = False, temporalSequenze = False) -> None:
         assert x is not None, "x is None"
         assert y_hat is not None, "y_hat is None"
         assert y is not None, "y is None"
@@ -161,12 +152,21 @@ class Munich480_DataModule(DataModuleBase):
         x = x.cpu().detach()
         x = x.squeeze(0) # elimino la dimensione della batch
         
+        if temporalSequenze:
+            x = x.permute(1, 0, 2, 3)
+            x = x.reshape(-1, 48, 48)
+            
+       
+        
         if X_as_Int:
             x = x.int()
         else :
-            x = x * 255
+            x = ((x * (2**16 - 1))*1e-4)
+            x *= 255
             x = x.int()
-        
+            x += 40
+            x = x.clamp(0, 255)
+            
         
         y_hat = y_hat.cpu().detach().squeeze(0)
         y = y.cpu().detach()

@@ -4,32 +4,44 @@ import torch
 import torch.nn as nn
 from torch.nn import Module, Sequential
 
-from Networks.NetworkComponents.TrainingModel import ImageSegmentation_TrainingBase
-from .NeuralNetworkBase import *
+from DatasetComponents.DataModule.DataModuleBase import DataModuleBase
+from Networks.NetworkComponents.TrainingModel import Semantic_ImageSegmentation_TrainingBase
+from ...NetworkComponents.NeuralNetworkBase import *
 
-class UNET_2D(ImageSegmentation_TrainingBase):
+class UNET_2D(Semantic_ImageSegmentation_TrainingBase):
     
-    def __init__(self, in_channel:int = 1, out_channel: int = 1, features: tuple[int, int, int, int] = (64,128,256,512), inputSize: list | None = None) -> None:
+    def __init__(self, **kwargs) -> None:
+        
+        datamodule: DataModuleBase = kwargs.get("datamodule")
+        features: tuple[int, int, int, int] = (64,128,256,512)
+        
+        in_channel: int = datamodule.input_channels
+        out_channel: int = datamodule.output_classes
+        output_Classes: int = datamodule.output_classes
+        inputSize: list | None = datamodule.input_size
+        lr: float = kwargs.get("lr", 1e-3)
+        
+    
         
         inputSize = [1, in_channel, 572,572] if inputSize is None else inputSize
         
         super().__init__(
             in_channel= in_channel, 
             out_channel=out_channel,
-            output_Classes=out_channel,
+            output_Classes=output_Classes,
             inputSize = inputSize,
-            lr=1e-3
+            lr=lr
         )
+        
         
         assert len(features) == 4, "The number of features must be 4"
         assert all(i > 0 for i in features), "The features must be positive integers"
         
         self._features = features
-        
         self._EncoderBlocks = nn.ModuleList()
         self._Bottleneck = nn.ModuleList()
         self._DecoderBlocks = nn.ModuleList()
-        self._OutputLayer = nn.ModuleList()
+        self._OutputLayer = nn.Sequential()
         self._Pool = nn.MaxPool2d(kernel_size=2, stride=2)
         
         for feature in features:
@@ -87,6 +99,17 @@ class UNET_2D(ImageSegmentation_TrainingBase):
                 kernel_size=1
             )
         )
+        
+        
+        lossClass = self.configure_loss()
+        
+        if isinstance(lossClass, nn.BCELoss):
+            self._OutputLayer.append(nn.Sigmoid())   
+        elif isinstance(lossClass, nn.CrossEntropyLoss):
+            pass
+        else:
+            raise ValueError("The loss function is not supported")
+        
     
     def forward(self, x) -> torch.Tensor | None :
         
@@ -128,5 +151,5 @@ class UNET_2D(ImageSegmentation_TrainingBase):
         
        
 
-class UNet_3D(LightModelBase):
+class UNet_3D(Semantic_ImageSegmentation_TrainingBase):
     pass
