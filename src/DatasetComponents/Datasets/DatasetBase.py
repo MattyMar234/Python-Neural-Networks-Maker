@@ -53,15 +53,10 @@ class DatasetBase(Dataset):
     
     @lru_cache(maxsize=None)  # Decoratore per memorizzare i risultati calcolati
     def _one_hot_encode(self, labels: torch.tensor) -> torch.tensor:
-        # if n > self._classesCount:
-        #     raise IndexError("Index out of range")
-            
-        # one_hot= np.zeros(self._classesCount, dtype=np.float32)
-        # one_hot[int(n)] = 1.0
-        # return one_hot
-        labels_tensor = torch.tensor(labels.clone().detach(), dtype=torch.long)
+        labels_tensor = labels.clone().detach().long()
         one_hot = torch.nn.functional.one_hot(labels_tensor, num_classes=self._classesCount)
         return one_hot
+
     
     def _one_hot_encode_no_cache(self, labels: any):
         labels_tensor = torch.tensor(labels, dtype=torch.long)

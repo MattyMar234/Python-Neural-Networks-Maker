@@ -133,7 +133,6 @@ class Munich480(Segmentation_Dataset_Base):
     def _normalize_dif_data(self, data: np.array, profile) -> np.array:
         # """Normalizza i dati tra 0 e 255."""
         # return ((data - np.min(data)) / (np.max(data) - np.min(data)) * 255).astype(np.uint8)
-        data = data.astype(np.float32)
         
         match(profile['dtype']):
             case "uint8":
@@ -150,9 +149,11 @@ class Munich480(Segmentation_Dataset_Base):
     
     
     def _load_dif_file(self, filePath:str, normalize: bool = True) -> Dict[str,any]:
-        #async with Munich480._semaphore:
+        
+        #rasterio.errors.RasterioIOError: /dataset/munich480/data16/12299/20160926_10m.tif: Cannot allocate memory
         with rasterio.open(filePath) as src:
             data = src.read()
+            data = data.astype(np.float32)
             profile = src.profile
             
         if normalize:
@@ -254,6 +255,9 @@ class Munich480(Segmentation_Dataset_Base):
         dictData['y'] = y
         
         #print(x.shape, y.shape) ---> torch.Size([48, 48, 832]) np.size(48, 48)
+        
+        
+        
         return dictData
     
     def on_apply_transforms(self, items: dict[str, any]) -> dict[str, any]:
@@ -292,7 +296,7 @@ class Munich480(Segmentation_Dataset_Base):
 
         
         if self._oneHot:
-            y = torch.Tensor(self._one_hot_encode(y))
+            y = torch.Tensor(self._one_hot_encode_no_cache(y))
         
         y = y.float()
         y = y.permute(2,0,1)# -> (c x h x w)

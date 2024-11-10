@@ -55,11 +55,13 @@ def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModu
     
     datamodule.setup()
     train = datamodule.train_dataloader()
-    sample = train.dataset[0]
+    #sample = train.dataset[0]
+    
+    for n, d in enumerate(train):
+        print(f"{n}/{len(train)}")
     
     
-    
-    datamodule.show_processed_sample(sample[0], sample[1], sample[1], 0, temporalSequenze = False)
+    #datamodule.show_processed_sample(sample[0], sample[1], sample[1], 0, temporalSequenze = False)
     #train.dataset.show_sample(sample[0])
     #print(datamodule.number_of_channels())
     
