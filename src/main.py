@@ -15,7 +15,7 @@ from Database.Tables import *
 from DatasetComponents.Datasets.munich480 import Munich480
 from Networks.Architettures.SemanticSegmentation.UNet import UNET_2D
 import Networks.Architettures as NetArchs
-from Networks.NetworkFactory import *
+from Networks.Metrics.ConfusionMatrix import *
 from Networks.NetworkManager import *
 from Networks.NetworkComponents.TrainingModel import *
 from Networks.NetworkComponents.NeuralNetworkBase import *
@@ -54,11 +54,26 @@ def trainModel(args: argparse.Namespace | None, device: str, datamodule: DataMod
 def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModuleBase, model: ModelBase) -> None:
     
     datamodule.setup()
+    confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27)
     train = datamodule.train_dataloader()
-    #sample = train.dataset[0]
+    sample = train.dataset[100]
     
-    for n, d in enumerate(train):
-        print(f"{n}/{len(train)}")
+    y1 = torch.argmax(sample[1], dim=0)
+    y2 = torch.randint_like(y1, low=0, high=26)
+    
+    print(y1, y2)
+    
+    confMatrix.update(y2, y1)
+    confMatrix.compute(showGraph=True)
+    
+    
+    #results_vec, results_scalar = confMatrix.compute()
+    
+    
+    
+    
+    # for n, d in enumerate(train):
+    #     print(f"{n}/{len(train)}")
     
     
     #datamodule.show_processed_sample(sample[0], sample[1], sample[1], 0, temporalSequenze = False)

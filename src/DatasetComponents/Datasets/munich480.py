@@ -55,7 +55,13 @@ class Munich480(Segmentation_Dataset_Base):
     class Year(Flag):
         Y2016 = auto()
         Y2017 = auto()
-        
+       
+       
+    def __setstate__(self, state):
+        return
+     
+    def __getstate__(self) -> object:
+        return {} 
     
 
     def __new__(cls, folder, *args, **kwargs):

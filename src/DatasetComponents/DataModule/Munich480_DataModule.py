@@ -39,6 +39,13 @@ class Munich480_DataModule(DataModuleBase):
         24 : '#b2e061', 25 : '#ff4f81', 26 : '#aa42f5' 
     }
     
+    def __setstate__(self, state):
+        return
+     
+    def __getstate__(self) -> object:
+        return {}
+    
+    
     def __init__(
         self, 
         datasetFolder:str, 
@@ -134,6 +141,7 @@ class Munich480_DataModule(DataModuleBase):
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(self._TRAIN, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=True, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
+        #return DataLoader(self._VAL, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(self._VAL, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)

@@ -86,26 +86,7 @@ class NetworkManager:
 
     def lightTrainNetwork(self, datamodule: DataModuleBase, **kwargs):
         
-        
-        # train_dataloader = DataLoader(
-        #     dataset = trainingDataset, 
-        #     batch_size = self._args.batch_size, 
-        #     shuffle = True, 
-        #     num_workers = self._args.workers, 
-        #     #worker_init_fn=trainingDataset.worker_init_fn,
-        #     pin_memory=True,
-        #     persistent_workers=True
-        # )
-        
-        # validation_dataloader = DataLoader(
-        #     dataset = testDataset,     
-        #     batch_size = self._args.batch_size, 
-        #     shuffle = False, 
-        #     num_workers = self._args.workers, 
-        #     #worker_init_fn=trainingDataset.worker_init_fn,
-        #     pin_memory=True,
-        #     persistent_workers=True
-        # )
+
         
         pl.seed_everything(NetworkManager.__trainingRandomSeed, workers= True)#self._args.workers > 0)
         
