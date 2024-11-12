@@ -30,7 +30,7 @@ class UNET_2D(Semantic_ImageSegmentation_TrainingBase):
             out_channel=out_channel,
             output_Classes=output_Classes,
             inputSize = inputSize,
-            lr=lr
+            **kwargs
         )
         
         
@@ -50,9 +50,9 @@ class UNET_2D(Semantic_ImageSegmentation_TrainingBase):
                     num_convs=2,
                     in_channels=in_channel, 
                     out_channels=feature, 
-                    kernel_size=3, 
-                    stride=1, 
-                    padding=1,
+                    kernel_size=(3,3), 
+                    stride=(1,1), 
+                    padding=(1,1),
                     bias=False
                 )
             )
@@ -152,4 +152,51 @@ class UNET_2D(Semantic_ImageSegmentation_TrainingBase):
        
 
 class UNet_3D(Semantic_ImageSegmentation_TrainingBase):
-    pass
+    def __init__(self, **kwargs) -> None:
+        
+        datamodule: DataModuleBase = kwargs.get("datamodule")
+        features: tuple[int, int, int, int] = (64,128,256,512)
+        
+        in_channel: int = datamodule.input_channels
+        out_channel: int = datamodule.output_classes
+        output_Classes: int = datamodule.output_classes
+        inputSize: list | None = datamodule.input_size
+        lr: float = kwargs.get("lr", 1e-3)
+        
+    
+        
+        inputSize = [1, in_channel, 572,572] if inputSize is None else inputSize
+        
+        super().__init__(
+            in_channel= in_channel, 
+            out_channel=out_channel,
+            output_Classes=output_Classes,
+            inputSize = inputSize,
+            lr=lr
+        )
+        
+        
+        assert len(features) == 4, "The number of features must be 4"
+        assert all(i > 0 for i in features), "The features must be positive integers"
+        
+        self._features = features
+        self._EncoderBlocks = nn.ModuleList()
+        self._Bottleneck = nn.ModuleList()
+        self._DecoderBlocks = nn.ModuleList()
+        self._OutputLayer = nn.Sequential()
+        
+        self._Downsampler = nn.MaxPool3d(kernel_size=(2,2,2), stride=(2,2,2))
+
+        for feature in features:
+            self._EncoderBlocks.append(
+                Multiple_Conv3D_Block(
+                    num_convs=2,
+                    in_channels=in_channel, 
+                    out_channels=feature, 
+                    kernel_size=(3,3,3), 
+                    stride=(2,2,2), 
+                    padding=(1,1,1),
+                    bias=False
+                )
+            )
+            in_channel = feature

@@ -1,5 +1,6 @@
 from ast import Tuple
-from typing import Dict, Final
+from functools import lru_cache
+from typing import Dict, Final, List
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap
 import matplotlib.patches as mpatches
@@ -8,18 +9,39 @@ import pytorch_lightning as pl
 from torchvision import transforms
 import torch
 import opendatasets
+import colorsys
+import seaborn as sns
 
 from DatasetComponents.Datasets.munich480 import Munich480
 
 from .DataModuleBase import *
 from torch.utils.data import DataLoader
 import os
-import os
-import os
-#from DatasetComponents.Datasets.munich480 import *
+
+
+
+def _generate_distinct_colors(num_classes: int) -> Dict[int, str]:
+    colors = {}
+    hue_step = 1 / num_classes  # Ampio intervallo per distribuire i colori distintamente
+    
+    for i in range(num_classes):
+        # Genera un hue con un intervallo ampio per garantire differenze cromatiche
+        hue = (i * hue_step) % 1.0
+        # Variamo leggermente la luminosità e la saturazione per evitare colori simili
+        lightness = 0.5 + (i % 2) * 0.1  # Alterna tra due valori di luminosità
+        saturation = 0.8 - (i % 3) * 0.2  # Alterna tre valori di saturazione
+
+        # Converti HLS a RGB e poi in esadecimale
+        rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
+        hex_color = '#{:02x}{:02x}{:02x}'.format(int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
+        colors[i] = hex_color
+    
+    return colors
+
 
 
 class Munich480_DataModule(DataModuleBase):
+    
     
     TemporalSize: Final[int] = 32
     ImageChannels: Final[np.array] = np.array([4,6,3])
@@ -27,17 +49,24 @@ class Munich480_DataModule(DataModuleBase):
     ImageHeight: Final[int] = 48
     ClassesCount: Final[int] = 27
     
+    
     _KAGGLE_DATASET_URL: Final[str] = "https://www.kaggle.com/datasets/artelabsuper/sentinel2-munich480"
     _CLASSES_FILE = "classes.txt"
-    _MAP_COLORS: Dict[int, str] = {
-        0 : '#000000',  1 : '#ff7f0e',  2 : '#2ca02c',   3 : '#d62728',
-        4 : '#9467bd',  5 : '#8c564b',  6 : '#e377c2',   7 : '#7f7f7f',
-        8 : '#bcbd22',  9 : '#17becf', 10 : '#ff9896',  11 : '#98df8a',
-        12 : '#c5b0d5', 13 : '#ffbb78', 14 : '#c49c94',  15 : '#f7b6d2',
-        16 : '#9edae5', 17 : '#aec7e8', 18 : '#ffcc5c',  19 : '#ff6f69',
-        20 : '#96ceb4', 21 : '#ff9b85', 22 : '#c1c1c1',  23 : '#ffd700',
-        24 : '#b2e061', 25 : '#ff4f81', 26 : '#aa42f5' 
-    }
+    # _MAP_COLORS: Dict[int, str] = {
+    #     0 : '#000000',  1 : '#ff7f0e',  2 : '#2ca02c',   3 : '#d62728',
+    #     4 : '#9467bd',  5 : '#8c564b',  6 : '#e377c2',   7 : '#7f7f7f',
+    #     8 : '#bcbd22',  9 : '#17becf', 10 : '#ff9896',  11 : '#98df8a',
+    #     12 : '#c5b0d5', 13 : '#ffbb78', 14 : '#c49c94',  15 : '#f7b6d2',
+    #     16 : '#9edae5', 17 : '#aec7e8', 18 : '#ffcc5c',  19 : '#ff6f69',
+    #     20 : '#96ceb4', 21 : '#ff9b85', 22 : '#c1c1c1',  23 : '#ffd700',
+    #     24 : '#b2e061', 25 : '#ff4f81', 26 : '#aa42f5' 
+    # }
+    
+    _MAP_COLORS: Dict[int, str] = _generate_distinct_colors(27)
+    
+    
+    
+    
     
     def __setstate__(self, state):
         return
@@ -73,7 +102,9 @@ class Munich480_DataModule(DataModuleBase):
         self._total_channel = 13
         self._prefetch_factor: int | None = 1
         
+        
         self._classesMapping: dict = {}
+        self._read_classes()
         
         if self._num_workers == 0:
             self._persistent_workers = False
@@ -127,11 +158,37 @@ class Munich480_DataModule(DataModuleBase):
                 id, cl = row.split('|')
                 self._classesMapping[int(id)] = cl     
         print(self._classesMapping)
+        
+    #@lru_cache(maxsize=10)
+    def map_classes(self, classes: np.ndarray | List[int] | int) -> List[str] | str | None:
+        
+        if type(classes) == int:
+            return f"{self._classesMapping[classes]} - {classes}"
+        
+        if type(classes) == np.ndarray:
+            classes = classes.tolist()
+        
+        list_classes: List[str] = []
+          
+        for i in classes:
+            list_classes.append(f"{self._classesMapping[i]} - {i}")
+        
+    def classesToIgnore(self) -> List[int]:
+        sequenze = np.arange(0, self.ClassesCount)
+        ingnore = []
+        
+        assert len(self._classesMapping.keys()) > 0, "self._classesMapping is empty"
+        
+        for i in sequenze:
+            if i not in self._classesMapping.keys():
+                ingnore.append(i)
+           
+        
+        return ingnore
+        
 
 
     def setup(self, stage=None) -> None:
-        
-        self._read_classes()
         
         self._TRAIN = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= self._year, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
         self._VAL   = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.VALIDATION, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
@@ -150,7 +207,7 @@ class Munich480_DataModule(DataModuleBase):
         return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
     
     
-    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, X_as_Int: bool = False, temporalSequenze = False) -> None:
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = False) -> None:
         assert x is not None, "x is None"
         assert y_hat is not None, "y_hat is None"
         assert y is not None, "y is None"
@@ -191,7 +248,7 @@ class Munich480_DataModule(DataModuleBase):
         num_cols: int = (num_images // rowElement) + (num_images % rowElement != 0)
         
         fig1, axes1 = plt.subplots(rowElement, num_cols, figsize=(10, 12))
-        fig1.suptitle(f"Images index {index}")
+        fig1.suptitle(f"Index {index}")
         
         for idx in range(num_images):
             row: int = idx % rowElement
@@ -236,36 +293,34 @@ class Munich480_DataModule(DataModuleBase):
         fig2.subplots_adjust(right=0.7)
         
         fig1.tight_layout(pad=2.0)
+        
+        # fig3, axes3 = plt.subplots(1, 1, figsize=(10, 5))
+        # axes3.imshow(confusionMatrix, cmap='hot')
+        
+        # Finestra 3: Matrice di confusione
+        
+        
+        plt.figure("Confusion Matrix", figsize=(8, 6))
+        sns.heatmap(
+            data=confusionMatrixData['data'], 
+            annot=confusionMatrixData['annot'], 
+            fmt=confusionMatrixData['fmt'], 
+            cmap=confusionMatrixData['cmap'], 
+            cbar=confusionMatrixData['cbar'],
+            xticklabels=confusionMatrixData['xticklabels'], 
+            yticklabels=confusionMatrixData['yticklabels']
+        )
+        plt.xlabel("Predicted Label")
+        plt.ylabel("True Label")
+        plt.title("Confusion Matrix")
+        plt.tight_layout()
+        
+        
+        #plt.imshow(confusionMatrix)
         plt.show()
         
         
-        # for i in range(8):
-           
-        #     # 2. Mappa etichetta `y`
-        #     ax = axes[i, col]
-        #     ax.imshow(label_map, cmap=cmap)
-        #     #ax.set_title(f"Label {i+1}")
-        #     ax.axis('off')
-            
-        #     # 3. Mappa predizioni `y_hat`
-        #     ax = axes[i, col + 1]
-        #     ax.imshow(pred_map, cmap=cmap)
-        #     #ax.set_title(f"Pred. {i+1}")
-        #     ax.axis('off')
-            
-        #     # 4. Mappa della loss
-        #     # ax = axes[3, i]
-        #     # ax.imshow(loss_map, cmap='hot')
-        #     # ax.set_title(f"Loss {i+1}")
-        #     # ax.axis('off')
-            
-        # # Aggiungi la legenda con la corrispondenza colore-categoria
-        # legend_patches = [mpatches.Patch(color=Munich480_DataModule._MAP_COLORS[cls], label=f'{label}') for cls, label in self._classesMapping.items()]#for cls, color in Munich480_DataModule._MAP_COLORS.items()]
-        # plt.legend(handles=legend_patches, bbox_to_anchor=(1.2, 0.5), loc='upper left', borderaxespad=0.)
 
-        # plt.tight_layout(pad=1.0)
-        # plt.subplots_adjust(right=0.50)
-        # plt.show()
         
         
         

@@ -1,3 +1,4 @@
+from typing import Tuple
 import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
@@ -113,6 +114,52 @@ class Multiple_Conv2D_Block(nn.Module):
             for _ in range(num_convs):  
                 self.blockComponents.append(
                     nn.Conv2d(
+                        in_channels=in_channels, 
+                        out_channels=out_channels, 
+                        kernel_size=kernel_size, 
+                        stride=stride, 
+                        padding=padding, 
+                        bias=bias
+                    )
+                )
+                       
+                in_channels = out_channels
+                self.blockComponents.append(nn.BatchNorm2d(out_channels))
+                self.blockComponents.append(nn.ReLU(inplace=False))
+                
+        def forward(self, x):
+            return self.blockComponents(x)
+        
+        
+class Multiple_Conv3D_Block(nn.Module):
+        def __init__(
+            self, 
+            num_convs: int, 
+            in_channels: int, 
+            out_channels: int, 
+            kernel_size: int | Tuple[int, int, int], 
+            stride: int | Tuple[int, int, int] = 1, 
+            padding: int | Tuple[int, int, int] = 0, 
+            bias: bool = False
+        ):
+            
+            assert isinstance(num_convs, int), "num_convs must be an integer"
+            assert num_convs > 0, "num_convs must be greater than 0"
+            assert isinstance(in_channels, int), "in_channels must be an integer"
+            assert in_channels > 0, "in_channels must be greater than 0"
+            assert isinstance(out_channels, int), "out_channels must be an integer"
+            assert out_channels > 0, "out_channels must be greater than 0"
+            assert isinstance(kernel_size, int) or isinstance(kernel_size, tuple), "kernel_size must be an integer or a tuple"
+            assert isinstance(stride, int) or isinstance(stride, tuple), "stride must be an integer or a tuple"
+            assert isinstance(padding, int) or isinstance(padding, tuple), "padding must be an integer or a tuple"
+            
+            super().__init__()
+            
+            self.blockComponents = nn.Sequential()
+            
+            for _ in range(num_convs):  
+                self.blockComponents.append(
+                    nn.Conv3d(
                         in_channels=in_channels, 
                         out_channels=out_channels, 
                         kernel_size=kernel_size, 

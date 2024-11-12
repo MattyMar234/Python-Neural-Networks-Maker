@@ -1,4 +1,6 @@
 from ast import Tuple
+from typing import List
+import numpy as np
 import opendatasets
 import pytorch_lightning as pl
 import torch
@@ -25,6 +27,15 @@ class DataModuleBase(pl.LightningDataModule):
             os.makedirs(folder)
             
         opendatasets.download(dataset_id_or_url=url, data_dir=folder)
+    
+    @abstractmethod 
+    def map_classes(self, classes: np.ndarray | List[int] | int) -> List[str] | str | None:
+        #raise NotImplementedError("map_classes method must be implemented")
+        return None
+      
+    @abstractmethod
+    def classesToIgnore(self) -> List[int]: 
+        raise NotImplementedError("classesToIgnore method must be implemented")
       
     @property 
     @abstractmethod  

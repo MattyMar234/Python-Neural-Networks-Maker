@@ -1,5 +1,5 @@
 import io
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 from PIL import Image, ImageFile
 
 from sklearn.metrics import confusion_matrix
@@ -17,18 +17,29 @@ class ConfusionMatrix(MetricBase):
     def __init__(self, *, classes_number: int, ignore_class: List[int] | None=None, mapFuntion: object | None = None, **kwargs):
         super().__init__(**kwargs)
         
-        if type(ignore_class) == list:
-            ignore_class = np.array(ignore_class)
-        
-        self._ignore_class: np.array | None = ignore_class  # the class index to be removed
+       
+        self._ignore_class: List[int] = ignore_class  # the class index to be removed
         self._classes_count: int = classes_number
         self._mapFuntion: object | None = mapFuntion
+        self._class_labels: list = []
+    
+        
+        for i in range(self._classes_count):
+            if self._ignore_class is not None and i in self._ignore_class:
+                continue
+            if self._mapFuntion is not None:
+                self._class_labels.append(self._mapFuntion(i))
+            else:
+                self._class_labels.append(i)
         
         
-        if ignore_class is None:
-            self._matrix = np.zeros((self._classes_count, self._classes_count))
-        else:
-            self._matrix = np.zeros((self._classes_count - len(ignore_class)), self._classes_count - (len(ignore_class)))
+        self._matrix = np.zeros((self._classes_count, self._classes_count))
+        
+        
+        # if ignore_class is None:
+        #    self._matrix = np.zeros((self._classes_count, self._classes_count))
+        # else:
+        #     self._matrix = np.zeros((self._classes_count - len(ignore_class)), self._classes_count - (len(ignore_class)))
         
 
     def get_labels(self):
@@ -72,7 +83,7 @@ class ConfusionMatrix(MetricBase):
         
         
 
-    def compute(self, figsize=(28, 16), cmap="viridis", showGraph: bool = False) -> None | torch.Tensor:#Tuple[any,any]:
+    def compute(self, figsize=(28, 16), cmap="viridis", showGraph: bool = False) -> None | Tuple[torch.Tensor, Dict[str, any]]:
 
         # To format the matrix
         # https://medium.com/@dtuk81/confusion-matrix-visualization-fc31e3f30fea
@@ -88,7 +99,7 @@ class ConfusionMatrix(MetricBase):
             matrix = np.delete(matrix, self._ignore_class, axis=1)  # Rimuovi colonne
         
         
-        class_labels = np.arange(0, self._classes_count, 1, np.uint16)
+        
         
         #row_sums = np.sum(matrix, axis=1, keepdims=True)
         # cm_percent = matrix / np.sum(matrix, axis=1, keepdims=True) * 100
@@ -105,14 +116,27 @@ class ConfusionMatrix(MetricBase):
         labels = np.asarray(labels).reshape(matrix.shape)
         
         plt.figure(figsize=figsize)
+        
+        
+        graphData: Dict[str, any] = {
+            "data":cm_percent, 
+            "annot":labels, 
+            "fmt":"", 
+            "cmap":cmap, 
+            "cbar":True,
+            "xticklabels":self._class_labels, 
+            "yticklabels":self._class_labels
+        }
+        
+        
         sns.heatmap(
             data=cm_percent, 
             annot=labels, 
             fmt="", 
             cmap=cmap, 
             cbar=True,
-            xticklabels=class_labels, 
-            yticklabels=class_labels
+            xticklabels=self._class_labels, 
+            yticklabels=self._class_labels
         )
         
         plt.xlabel("Predicted Label")
@@ -140,7 +164,7 @@ class ConfusionMatrix(MetricBase):
         
         buf.close()
         
-        return image_tensor
+        return image_tensor, graphData
         
         # return
 

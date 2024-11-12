@@ -9,6 +9,7 @@ from typing import Final, Protocol
 import torchmetrics
 from torchmetrics import Metric
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
+from DatasetComponents.DataModule.DataModuleBase import DataModuleBase
 from Networks.Metrics.ConfusionMatrix import ConfusionMatrix
 from .NeuralNetworkBase import LightModelBase, ModelBase
 import torchmetrics
@@ -27,6 +28,7 @@ class TraingBase(LightModelBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
+        datamodule: DataModuleBase = kwargs.get("datamodule")
         self._kwargs = kwargs
         self._learning_rate: float = kwargs['lr']
         
@@ -42,7 +44,9 @@ class TraingBase(LightModelBase):
         self.val_loss_metric = torchmetrics.MeanMetric()
         self.val_accuracy_metric = torchmetrics.Accuracy(task="multiclass", num_classes=self._output_Classes)
         #self.confusion_matrix_metric = torchmetrics.ConfusionMatrix(task="multiclass", num_classes=self._output_Classes)
-        self.confusion_matrix_metric = ConfusionMatrix(classes_number=self._output_Classes)
+        
+        
+        self.confusion_matrix_metric = ConfusionMatrix(classes_number=self._output_Classes, ignore_class= datamodule.classesToIgnore(), mapFuntion=datamodule.map_classes)
     
         self._last_avg_trainLoss: float = -1.0
         self._last_avg_valLoss: float = -1.0
@@ -130,7 +134,7 @@ class TraingBase(LightModelBase):
         self._last_avg_trainLoss = self.train_loss_metric.compute()
         self._last_avg_valLoss = self.val_loss_metric.compute()
         val_acc = self.val_accuracy_metric.compute()
-        image_tensor = self.confusion_matrix_metric.compute()
+        image_tensor, _ = self.confusion_matrix_metric.compute()
         
         self.train_loss_metric.reset()
         self.val_loss_metric.reset()
