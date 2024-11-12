@@ -200,6 +200,7 @@ def main() -> None:
 
     #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0 --ckpt_path /app/Models/UNET_2D/checkpoints/epoch=9-avg_val_loss=0.43453678.ckpt
      #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0
+    #python main.py --train --worker 12 --batch_size 2 --epochs 40 --arch UNET_2D --ckpt_path /app/Models/UNET_2D/checkpoints/last.ckpt --lr=1e-3
     
     # parser.add_argument("--devices", type=int, default=0)
     # parser.add_argument("--epochs", type=int, default=1)
@@ -271,6 +272,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
+    
     
     
   
