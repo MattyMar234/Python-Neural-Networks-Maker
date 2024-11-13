@@ -252,7 +252,7 @@ def main() -> None:
         datasetFolder = "/dataset/munich480",
         batch_size=args.batch_size,
         num_workers=args.workers,
-        useTemporalSize=False,
+        useTemporalSize=True,
         year= Munich480.Year.Y2016,# | Munich480.Year.Y2017,
     ) 
     

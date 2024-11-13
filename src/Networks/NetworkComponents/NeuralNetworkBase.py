@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import List, Optional, Tuple
 import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
@@ -43,14 +43,17 @@ class LightModelBase(pl.LightningModule):
     def __init__(self, **kwargs) -> None:
         super().__init__()
         
-        self._in_Channel:int = kwargs['in_channel']
-        self._out_channel: int = kwargs['out_channel']
-        self._output_Classes: int = kwargs['output_Classes']
-        self._inputSize: list = kwargs['inputSize']
+        self._datamodule = kwargs.get("datamodule")
+        self._in_Channel:int = self._datamodule.input_channels
+        self._out_channel: int = self._datamodule.output_classes
+        self._output_Classes: int = self._datamodule.output_classes
+        self._DataInputSize: Optional[List[int]] = self._datamodule.input_size
+        self._inputSize: Optional[List[int]] = None
         
         assert self._in_Channel > 0, "Input channel must be greater than 0"
         assert self._out_channel > 0, "Output channel must be greater than 0"
         assert self._output_Classes > 0, "Output classes must be greater than 0"
+        assert self._DataInputSize is not None, "Input size must be not None"
 
         #self.__net = kwargs['net']
         
@@ -60,7 +63,7 @@ class LightModelBase(pl.LightningModule):
         
     def makeSummary(self, depth: int = 4) -> str:
         colName = ['input_size', 'output_size', 'num_params', 'trainable']
-        temp = summary(self, input_size=self._inputSize, col_width=20, col_names=colName, row_settings=['var_names'], verbose=0, depth=depth)
+        temp = summary(self, input_size=self._DataInputSize, col_width=20, col_names=colName, row_settings=['var_names'], verbose=0, depth=depth)
         return temp.__repr__()
         
     
@@ -170,8 +173,48 @@ class Multiple_Conv3D_Block(nn.Module):
                 )
                        
                 in_channels = out_channels
-                self.blockComponents.append(nn.BatchNorm2d(out_channels))
-                self.blockComponents.append(nn.ReLU(inplace=False))
+                self.blockComponents.append(nn.BatchNorm3d(out_channels))
+                self.blockComponents.append(nn.ReLU(inplace=True))
                 
         def forward(self, x):
             return self.blockComponents(x)
+        
+
+class Deconv3D_Block(nn.Module) :
+    
+    def __init__(
+            self, 
+            in_channels: int, 
+            out_channels: int, 
+            kernel_size: int | Tuple[int, int, int], 
+            stride: int | Tuple[int, int, int] = 1, 
+            padding: int | Tuple[int, int, int] = 0, 
+            bias: bool = False
+        ):
+        
+        
+        assert isinstance(in_channels, int), "in_channels must be an integer"
+        assert in_channels > 0, "in_channels must be greater than 0"
+        assert isinstance(out_channels, int), "out_channels must be an integer"
+        assert out_channels > 0, "out_channels must be greater than 0"
+        assert isinstance(kernel_size, int) or isinstance(kernel_size, tuple), "kernel_size must be an integer or a tuple"
+        assert isinstance(stride, int) or isinstance(stride, tuple), "stride must be an integer or a tuple"
+        assert isinstance(padding, int) or isinstance(padding, tuple), "padding must be an integer or a tuple"
+        
+        super(Deconv3D_Block, self).__init__()
+
+        self.deconv = nn.Sequential(
+            nn.ConvTranspose3d(
+                in_channels, 
+                out_channels, 
+                kernel_size=kernel_size,
+                stride=stride, 
+                padding=padding, 
+                output_padding=1, 
+                bias=bias
+            ),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.deconv(x)

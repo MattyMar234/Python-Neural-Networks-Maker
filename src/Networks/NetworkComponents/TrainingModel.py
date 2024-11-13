@@ -193,7 +193,7 @@ class Semantic_ImageSegmentation_TrainingBase(TraingBase):
     
     def configure_loss(self) -> nn.Module:
         
-        if self._kwargs['output_Classes'] == 1:
+        if self._output_Classes == 1:
             return nn.BCELoss()
         else:
             #return nn.NLLLoss()

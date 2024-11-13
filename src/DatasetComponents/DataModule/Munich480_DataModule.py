@@ -140,9 +140,9 @@ class Munich480_DataModule(DataModuleBase):
     @property    
     def input_size(self) -> list[int]:
         if self._useTemporalSize:
-            return [1, Munich480_DataModule.TemporalSize, self._total_channel, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
+            return [1, self._total_channel, Munich480_DataModule.TemporalSize, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
         else: 
-            return [1,self._total_channel, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
+            return [1, self._total_channel, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
 
     def prepare_data(self) -> None:
         if self._download:
