@@ -12,6 +12,7 @@ from Database.DatabaseConnection import PostgresDB
 from Database.DatabaseConnectionParametre import DatabaseParametre
 from Database.Tables import *
 
+from DatasetComponents.Datasets.DatasetBase import DatasetBase
 from DatasetComponents.Datasets.munich480 import Munich480
 from Networks.Architettures.SemanticSegmentation.UNet import UNET_2D
 import Networks.Architettures as NetArchs
@@ -23,6 +24,10 @@ from Networks.NetworkComponents.NeuralNetworkBase import *
 import argparse 
 from pathlib import Path
 import time
+
+from Utility.TIF_creator import TIF_Creator
+
+
 
 
 MODELS_OUTPUT_FOLDER = os.path.join(Path(os.getcwd()).parent.absolute(), 'Models')
@@ -53,32 +58,6 @@ def trainModel(args: argparse.Namespace | None, device: str, datamodule: DataMod
 
 def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModuleBase, model: ModelBase) -> None:
     
-    # datamodule.setup()
-    # confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27)
-    # train = datamodule.train_dataloader()
-    # sample = train.dataset[100]
-    
-    # y1 = torch.argmax(sample[1], dim=0)
-    # y2 = torch.randint_like(y1, low=0, high=26)
-    
-    # print(y1, y2)
-    
-    # confMatrix.update(y2, y1)
-    # confMatrix.compute(showGraph=True)
-    
-    
-    #results_vec, results_scalar = confMatrix.compute()
-    
-    
-    
-    
-    # for n, d in enumerate(train):
-    #     print(f"{n}/{len(train)}")
-    
-    
-    #datamodule.show_processed_sample(sample[0], sample[1], sample[1], 0, temporalSequenze = False)
-    #train.dataset.show_sample(sample[0])
-    #print(datamodule.number_of_channels())
 
 
     # databaseParametre = DatabaseParametre(
@@ -127,7 +106,7 @@ def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModu
     
     datamodule.setup()
     dataloader: DataLoader = datamodule.test_dataloader()#datamodule.test_dataloader()
-    dataset = dataloader.dataset
+    dataset:DatasetBase = dataloader.dataset
     
     
     confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=datamodule.classesToIgnore(), mapFuntion=datamodule.map_classes)
@@ -138,37 +117,77 @@ def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModu
     model.to(device)
     model.eval()
     
+    creator:TIF_Creator = TIF_Creator('/app/geoData')
+  
+  
+        
+    if args.idx >= 0:
+        idx = args.idx % len(dataset)
+
+        with torch.no_grad():  
+            data: Dict[str, any] = dataset.getItems(idx)
+            
+            x = data['x']
+            y = data['y']
+            x = x.to(device)
+            
+            y_hat = model(x.unsqueeze(0))
+            
+            y_hat_ = torch.argmax(y_hat, dim=1)
+            y_ = torch.argmax(y, dim=0)
+            
+            
+            creator.makeTIF(f'{idx}.tif', data['profile'], data =y_hat_, classColorMap = Munich480_DataModule.MAP_COLORS_AS_RGB_LIST)
+
+        return
     
-    with torch.no_grad():
-        idx: int = 0
+    if args.idx == -1:
         
-        if args.idx:
-            idx = args.idx % len(dataset)
+        creator.mergeTIFs('/app/merged.tif')
+        return
         
-        x, y = dataset[idx]
-        x = x.to(device)
+        with torch.no_grad(): 
+            for idx in range(len(dataset)):
+                data: Dict[str, any] = dataset.getItems(idx)
+
+                print(f"Processing {idx}/{len(dataset)}")
+
+                x = data['x']
+                y = data['y']
+                x = x.to(device)
+
+                y_hat = model(x.unsqueeze(0))
+
+                y_hat_ = torch.argmax(y_hat, dim=1)
+                y_ = torch.argmax(y, dim=0)
+
+
+                y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                
+                for i in range(48):
+                    for j in range(48):
+                        class_id = int(y_hat_[0, i, j])
+                        y_hat_RGB[:, i, j] = Munich480_DataModule.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                creator.makeTIF(f'{idx}.tif', data['profile'], data =y_hat_RGB, channels = 3, width=48, height=48) 
+            
+            
+            
         
         
-        y_hat = model(x.unsqueeze(0))
+        # y_ = y_.cpu().detach()
+        # y_hat_ = y_hat_.cpu().detach()
         
         
         
-        y_hat_ = torch.argmax(y_hat, dim=1)
-        y_ = torch.argmax(y, dim=0)
-        
-        y_ = y_.cpu().detach()
-        y_hat_ = y_hat_.cpu().detach()
+        # confMatrix.update(y_pr=y_hat_, y_tr=y_)
+        # _, graphData = confMatrix.compute(showGraph=False)
         
         
         
-        confMatrix.update(y_pr=y_hat_, y_tr=y_)
-        _, graphData = confMatrix.compute(showGraph=False)
+        # confMatrix.reset()
         
-        
-        
-        confMatrix.reset()
-        
-        datamodule.show_processed_sample(x, y_hat, y, idx, graphData)
+        # datamodule.show_processed_sample(x, y_hat, y, idx, graphData)
     
     
     #networkManager.lightTestNetwork(testDataset=TEST_DATASET)
@@ -231,7 +250,7 @@ def main() -> None:
         
     print(args)
     
-    device: torch.device = torch.device("cuda" if check_pytorch_cuda() else "cpu")
+    device: torch.device = torch.device("cuda" if args.gpu_or_cpu == 'gpu' and check_pytorch_cuda() else "cpu")
     print(f"Device selected: {device}") 
     
     if device.type == 'cuda' :
@@ -252,7 +271,7 @@ def main() -> None:
         datasetFolder = "/dataset/munich480",
         batch_size=args.batch_size,
         num_workers=args.workers,
-        useTemporalSize=True,
+        useTemporalSize=False,
         year= Munich480.Year.Y2016,# | Munich480.Year.Y2017,
     ) 
     

@@ -1,6 +1,6 @@
 from multiprocessing import process
 import threading
-from typing import Dict
+from typing import Dict, Optional, Tuple
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -35,16 +35,33 @@ class DatasetBase(Dataset):
         self._device = device
         self._DatasetSize: int = None
         self._caching = caching
+    
+        self._load_only_Y: bool = False
+        self._skip_transforms: bool = False
+        
+    def setLoadOnlyY(self, load_only_Y: bool):
+        self._load_only_Y = load_only_Y
+        
+    def setSkipTransforms(self, skip_transforms: bool):
+        self._skip_transforms = skip_transforms
 
 
-    def __getitem__(self, idx: int) -> torch.Tensor:
+    def __getitem__(self, idx: int) -> any:
+        if self._load_only_Y:
+            return torch.zeros(1), self.get_y_value(idx)
+        
         itemDict = self._getItem(idx)
-        itemDict = self.on_apply_transforms(itemDict)
+        
+        if not self._skip_transforms:
+            itemDict = self.on_apply_transforms(itemDict)
+        
         itemDict = self.adjustData(itemDict)
+        
+        
         return  itemDict['x'], itemDict['y']
     
     def getItems(self, idx: int) -> Dict[str,any]:
-        return self.__getitem__(idx)
+        return self._getItem(idx)
     
     def __len__(self) -> int:
         if self._DatasetSize is None:
@@ -64,7 +81,15 @@ class DatasetBase(Dataset):
         return one_hot
 
     @abstractmethod
+    def get_y_value(self, idx: int) -> Optional[torch.Tensor]:
+        raise NotImplementedError("get_y_value method must be implemented")
+
+    @abstractmethod
     def _getItem(self, idx: int) -> any:
+        pass
+    
+    @abstractmethod
+    def _getY_Item(self, idx: int) -> any:
         pass
 
     @abstractmethod

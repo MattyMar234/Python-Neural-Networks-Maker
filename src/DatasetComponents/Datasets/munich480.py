@@ -106,6 +106,18 @@ class Munich480(Segmentation_Dataset_Base):
         #print(self._dataSequenze)
     
     
+    def get_y_value(self, idx: int) -> Optional[torch.Tensor]:
+        assert idx < self.__len__() and idx >= 0, f"Index {idx} out of range"
+        
+        idx = self._mapIndex(idx)
+        sequenzeFolder = os.path.join(self._folderPath, "data16", str(idx))
+        y = self._load_y(sequenzeFolder)
+        
+        return torch.from_numpy(y).int()
+    
+    
+    
+    
     def _mapIndex(self, index: int) -> int:
         return self._dataSequenze[index]
     
@@ -137,7 +149,6 @@ class Munich480(Segmentation_Dataset_Base):
     
     
     def _normalize_dif_data(self, data: np.array, profile) -> np.array:
-        # """Normalizza i dati tra 0 e 255."""
         # return ((data - np.min(data)) / (np.max(data) - np.min(data)) * 255).astype(np.uint8)
         
         match(profile['dtype']):
@@ -161,6 +172,9 @@ class Munich480(Segmentation_Dataset_Base):
             data = src.read()
             data = data.astype(np.float32)
             profile = src.profile
+            
+            # if profile['nodata'] == None:
+            #     profile.pop('nodata')
             
         if normalize:
             data = self._normalize_dif_data(data = data, profile = profile)
@@ -233,6 +247,8 @@ class Munich480(Segmentation_Dataset_Base):
             x17_dict = self._load_year_sequenze("data17", str(idx))
             
             return {"x":torch.cat((x16_dict["x"], x17_dict["x"])), "y":x16_dict["y"], "profile" : x16_dict["profile"]}
+
+    
 
     def _getItem(self, idx: int) -> dict[str, any]:
         idx = self._mapIndex(idx)

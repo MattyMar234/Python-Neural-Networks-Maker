@@ -66,8 +66,13 @@ class UNET_2D(_UnetBase):
         inputSize: list | None = self._datamodule.input_size
         inputSize = [1, self._in_Channel, 572,572] if inputSize is None else inputSize
         
+        try:
+            assert len(inputSize) == 4, "The input size must be a list of 4 elements"
+        except AssertionError as e:
+            print(f"Error: {e}")
+            print("Input size: ", inputSize)
+            raise
         
-        assert len(inputSize) == 4, "The input size must be a list of 4 elements"
         
         self._DownSampler = nn.MaxPool2d(kernel_size=2, stride=2)
        

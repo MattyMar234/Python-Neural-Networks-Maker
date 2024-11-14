@@ -1,5 +1,5 @@
 from ast import Tuple
-from typing import List
+from typing import List, Optional
 import numpy as np
 import opendatasets
 import pytorch_lightning as pl
@@ -21,6 +21,8 @@ class DataModuleBase(pl.LightningDataModule):
         self._datasetFolder = datasetFolder
         self._batch_size = batch_size
         self._num_workers = num_workers
+        self._classes_weights: torch.Tensor | None = None
+        
         
     def _DownloadDataset(self, url:str, folder:str) -> None:
         if not os.path.exists(folder):
@@ -36,7 +38,21 @@ class DataModuleBase(pl.LightningDataModule):
     @abstractmethod
     def classesToIgnore(self) -> List[int]: 
         raise NotImplementedError("classesToIgnore method must be implemented")
-      
+    
+
+    @abstractmethod
+    def calculate_classes_weight(self) -> List[int]:
+        return torch.ones(self.output_classes) * (1 / self.output_classes)
+        #raise NotImplementedError("classes_frequenze method must be implemented")
+    
+    @property 
+    def getWeights(self) -> torch.Tensor:
+        if self._classes_weights is None:
+            self._classes_weights = self.calculate_classes_weight()
+        
+        return self._classes_weights
+    
+    
     @property 
     @abstractmethod  
     def output_classes(self) -> int:

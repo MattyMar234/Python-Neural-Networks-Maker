@@ -197,7 +197,8 @@ class Semantic_ImageSegmentation_TrainingBase(TraingBase):
             return nn.BCELoss()
         else:
             #return nn.NLLLoss()
-            return nn.CrossEntropyLoss()
+            print(f"CrossEntropyLoss loadded weights: {self._datamodule.getWeights}")
+            return nn.CrossEntropyLoss(weight=self._datamodule.getWeights)
     
     def compute_accuracy_metric(self, values: dict[str, any], batch_x: torch.Tensor, batch_y: torch.Tensor) -> None :
         predicted_classes = torch.argmax(values['y_hat'], dim=1)   # shape: (1, 48, 48)

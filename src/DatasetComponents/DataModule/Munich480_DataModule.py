@@ -38,6 +38,9 @@ def _generate_distinct_colors(num_classes: int) -> Dict[int, str]:
     
     return colors
 
+def hex_to_rgb(hex_color: str):
+    hex_color = hex_color.lstrip('#')
+    return np.array([int(hex_color[i:i+2], 16) for i in (0, 2, 4)], dtype=np.uint8)
 
 
 class Munich480_DataModule(DataModuleBase):
@@ -62,9 +65,9 @@ class Munich480_DataModule(DataModuleBase):
     #     24 : '#b2e061', 25 : '#ff4f81', 26 : '#aa42f5' 
     # }
     
-    _MAP_COLORS: Dict[int, str] = _generate_distinct_colors(27)
-    
-    
+    MAP_COLORS: Dict[int, str] = _generate_distinct_colors(27)
+    MAP_COLORS_AS_RGB_LIST: Dict[int, List[int]] = {key: hex_to_rgb(value) for key, value in MAP_COLORS.items()}
+
     
     
     
@@ -94,6 +97,7 @@ class Munich480_DataModule(DataModuleBase):
         self._TRAIN: Munich480 | None = None
         self._VAL: Munich480 | None = None
         self._TEST: Munich480 | None = None
+        self._setup_done = False
         
         self._year = year
         self._persistent_workers: bool = True
@@ -157,9 +161,9 @@ class Munich480_DataModule(DataModuleBase):
             if '|' in row:
                 id, cl = row.split('|')
                 self._classesMapping[int(id)] = cl     
-        print(self._classesMapping)
+        #print(self._classesMapping)
         
-    #@lru_cache(maxsize=10)
+    
     def map_classes(self, classes: np.ndarray | List[int] | int) -> List[str] | str | None:
         
         if type(classes) == int:
@@ -172,6 +176,8 @@ class Munich480_DataModule(DataModuleBase):
           
         for i in classes:
             list_classes.append(f"{self._classesMapping[i]} - {i}")
+        
+        return list_classes
         
     def classesToIgnore(self) -> List[int]:
         sequenze = np.arange(0, self.ClassesCount)
@@ -186,14 +192,64 @@ class Munich480_DataModule(DataModuleBase):
         
         return ingnore
         
+        
+    def calculate_classes_weight(self) ->torch.tensor:
+        if not self._setup_done:
+            self.setup()
+            
+        class_counts: torch.Tensor = torch.zeros(self.output_classes)# + 1e-12
+        core: int | None = os.cpu_count()
+        
+        if core == None:
+            core = 0
+            batch_size = 4
+        else:
+            batch_size:int = core * 20
+        
+        self._TRAIN.setLoadOnlyY(True)
+        
+        temp_loader = DataLoader(
+            self._TRAIN,  # Assuming self._TRAIN is a Dataset object
+            batch_size=10,  # Set batch_size=1 for individual sample processing
+            num_workers=core,
+            shuffle=False
+        )
+        
+        print("Calulating classes weight...")
+    
+        for i, (x, y) in enumerate(temp_loader):
+            class_counts += torch.bincount(y.flatten(), minlength=self.output_classes)
+            print(f"Load y classes: {min(i*batch_size, len(self._TRAIN))}/{len(self._TRAIN)}", end="\r")
+        
+        print()
+            
 
+        # Calcola i pesi come inverso della frequenza, e imposta a zero le classi assenti
+        weights = torch.zeros(self.output_classes)
+        weights[class_counts > 0] = 1.0 / class_counts[class_counts > 0].float()
+        weights = weights / weights.sum()  # Normalizza i pesi per sommare a 1
+
+        #weightsDict: Dict[int, float] = {i: weights[i].item() for i in range(len(weights))}
+
+        # print("Weights: ")
+        # for i in range(len(weights)):
+        #     try:
+        #         print(f"{weightsDict[i]:.10f} -> {self.map_classes(i)}")
+        #     except:
+        #         print(f"{weightsDict[i]:.10f} -> ?")
+        
+        # os._exit(0)
+        self._TRAIN.setLoadOnlyY(False)
+        return weights
 
     def setup(self, stage=None) -> None:
+        if self._setup_done:
+            return
         
         self._TRAIN = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= self._year, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
         self._VAL   = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.VALIDATION, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
         self._TEST  = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TEST, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
-
+        self._setup_done = True
 
 
     def train_dataloader(self) -> DataLoader:
@@ -205,6 +261,10 @@ class Munich480_DataModule(DataModuleBase):
 
     def test_dataloader(self) -> DataLoader:
         return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
+    
+    
+    
+   
     
     
     def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = False) -> None:

@@ -55,13 +55,11 @@ class LightModelBase(pl.LightningModule):
         assert self._output_Classes > 0, "Output classes must be greater than 0"
         assert self._DataInputSize is not None, "Input size must be not None"
 
-        #self.__net = kwargs['net']
         
-        #print(self.__net)
         #self.save_hyperparameters()
         
         
-    def makeSummary(self, depth: int = 4) -> str:
+    def makeSummary(self, depth: int = 20) -> str:
         colName = ['input_size', 'output_size', 'num_params', 'trainable']
         temp = summary(self, input_size=self._DataInputSize, col_width=20, col_names=colName, row_settings=['var_names'], verbose=0, depth=depth)
         return temp.__repr__()
