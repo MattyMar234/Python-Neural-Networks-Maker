@@ -129,6 +129,7 @@ def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModu
             
             x = data['x']
             y = data['y']
+            y = y.unsqueeze(0)
             x = x.to(device)
             
             y_hat = model(x.unsqueeze(0))
@@ -136,8 +137,21 @@ def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModu
             y_hat_ = torch.argmax(y_hat, dim=1)
             y_ = torch.argmax(y, dim=0)
             
+            print(y_hat_.shape, y_.shape)
             
-            creator.makeTIF(f'{idx}.tif', data['profile'], data =y_hat_, classColorMap = Munich480_DataModule.MAP_COLORS_AS_RGB_LIST)
+            y_ = y_.cpu().detach()
+            y_hat_ = y_hat_.cpu().detach()
+            
+            
+            
+            confMatrix.update(y_pr=y_hat_, y_tr=y_)
+            _, graphData = confMatrix.compute(showGraph=False)
+            
+            confMatrix.reset()
+        
+            datamodule.show_processed_sample(x, y_hat, y, idx, graphData)
+            
+            #creator.makeTIF(f'{idx}.tif', data['profile'], data =y_hat_, classColorMap = Munich480_DataModule.MAP_COLORS_AS_RGB_LIST)
 
         return
     
@@ -175,13 +189,7 @@ def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModu
             
         
         
-        # y_ = y_.cpu().detach()
-        # y_hat_ = y_hat_.cpu().detach()
         
-        
-        
-        # confMatrix.update(y_pr=y_hat_, y_tr=y_)
-        # _, graphData = confMatrix.compute(showGraph=False)
         
         
         

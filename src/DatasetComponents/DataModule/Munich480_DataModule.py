@@ -326,7 +326,7 @@ class Munich480_DataModule(DataModuleBase):
         
         
         # Crea una colormap personalizzata
-        color_list = [color for _, color in sorted(Munich480_DataModule._MAP_COLORS.items())]
+        color_list = [color for _, color in sorted(Munich480_DataModule.MAP_COLORS.items())]
         cmap = ListedColormap(color_list)
         
         label_map = y.argmax(dim=0).numpy()         # Etichetta per l'immagine corrente
@@ -346,7 +346,7 @@ class Munich480_DataModule(DataModuleBase):
         axes2[1].axis('off')
         
         # Aggiungi legenda accanto alla seconda figura
-        legend_patches = [mpatches.Patch(color=Munich480_DataModule._MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in self._classesMapping.items()]
+        legend_patches = [mpatches.Patch(color=Munich480_DataModule.MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in self._classesMapping.items()]
         fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper right', title="Class Colors")
 
         fig1.subplots_adjust(right=0.8)
