@@ -12,6 +12,7 @@ import opendatasets
 import colorsys
 import seaborn as sns
 
+from sklearn.utils.class_weight import compute_class_weight
 from DatasetComponents.Datasets.munich480 import Munich480
 
 from .DataModuleBase import *
@@ -45,12 +46,13 @@ def hex_to_rgb(hex_color: str):
 
 class Munich480_DataModule(DataModuleBase):
     
-    
     TemporalSize: Final[int] = 32
     ImageChannels: Final[np.array] = np.array([4,6,3])
     ImageWidth: Final[int] = 48
     ImageHeight: Final[int] = 48
     ClassesCount: Final[int] = 27
+    
+    _SINGLETON_INSTANCE = None
     
     
     _KAGGLE_DATASET_URL: Final[str] = "https://www.kaggle.com/datasets/artelabsuper/sentinel2-munich480"
@@ -76,6 +78,12 @@ class Munich480_DataModule(DataModuleBase):
      
     def __getstate__(self) -> object:
         return {}
+    
+    #singleton
+    def __new__(cls, *args, **kwargs):
+        if cls._SINGLETON_INSTANCE is None:
+            cls._SINGLETON_INSTANCE = super().__new__(cls)
+        return cls._SINGLETON_INSTANCE
     
     
     def __init__(
@@ -117,7 +125,7 @@ class Munich480_DataModule(DataModuleBase):
         
             
         if not useTemporalSize:
-            self._total_channel *= Munich480_DataModule.TemporalSize * (len(year))
+            self._total_channel *= Munich480_DataModule.TemporalSize
         
         
         self._training_trasforms = transforms.Compose([
@@ -197,7 +205,6 @@ class Munich480_DataModule(DataModuleBase):
         if not self._setup_done:
             self.setup()
             
-        class_counts: torch.Tensor = torch.zeros(self.output_classes)# + 1e-12
         core: int | None = os.cpu_count()
         
         if core == None:
@@ -212,35 +219,65 @@ class Munich480_DataModule(DataModuleBase):
             self._TRAIN,  # Assuming self._TRAIN is a Dataset object
             batch_size=10,  # Set batch_size=1 for individual sample processing
             num_workers=core,
-            shuffle=False
+            shuffle=False,
+            persistent_workers=False,
+            pin_memory=False,
+            prefetch_factor=None
         )
         
         print("Calulating classes weight...")
-    
-        for i, (x, y) in enumerate(temp_loader):
-            class_counts += torch.bincount(y.flatten(), minlength=self.output_classes)
-            print(f"Load y classes: {min(i*batch_size, len(self._TRAIN))}/{len(self._TRAIN)}", end="\r")
         
-        print()
+        y_flat: torch.Tensor = torch.empty((len(self._TRAIN) * Munich480_DataModule.ImageWidth * Munich480_DataModule.ImageHeight), dtype=torch.uint8)
+        index: int = 0
+    
+        for i, (_, y) in enumerate(temp_loader):
+            print(f"Loading: {min((i+1)*batch_size, len(self._TRAIN))}/{len(self._TRAIN)}", end="\r")
             
+            y = y.flatten()
+            elementCount = y.shape[0]
+            y_flat[index: index + elementCount] = y
+            index += elementCount
+            
+        print()
+    
+            
+        # print("my weights")
+        # class_counts: torch.Tensor = torch.zeros(self.output_classes)# + 1e-12
+        # class_counts += torch.bincount(y_flat, minlength=self.output_classes)
 
-        # Calcola i pesi come inverso della frequenza, e imposta a zero le classi assenti
-        weights = torch.zeros(self.output_classes)
-        weights[class_counts > 0] = 1.0 / class_counts[class_counts > 0].float()
-        weights = weights / weights.sum()  # Normalizza i pesi per sommare a 1
+        # # Calcola i pesi come inverso della frequenza, e imposta a zero le classi assenti
+        # weights = torch.zeros(self.output_classes)
+        # weights[class_counts > 0] = 1.0 / class_counts[class_counts > 0].float()
+        # weights = weights / weights.sum()  # Normalizza i pesi per sommare a 1
+        
+        # weightsDict: Dict[int, float] = {i: weights[i].item() for i in range(len(weights))}
 
-        #weightsDict: Dict[int, float] = {i: weights[i].item() for i in range(len(weights))}
-
-        # print("Weights: ")
         # for i in range(len(weights)):
         #     try:
         #         print(f"{weightsDict[i]:.10f} -> {self.map_classes(i)}")
         #     except:
         #         print(f"{weightsDict[i]:.10f} -> ?")
         
-        # os._exit(0)
+        
+        y_flat = y_flat.numpy()
+        available_classes = np.unique(y_flat)
+        
+        class_weights = compute_class_weight(
+            class_weight='balanced',  # Opzione per bilanciare in base alla frequenza
+            classes=available_classes,  # Array di tutte le classi
+            y=y_flat
+        )
+        
+        # Mappa i pesi su tutte le classi, assegnando peso 0 alle classi assenti
+        weights = np.zeros(Munich480_DataModule.ClassesCount, dtype=np.float32)
+        weights[available_classes] = class_weights
+        weights_tensor = torch.tensor(weights, dtype=torch.float32)
+
+        print(f"Calculated classes weight: {weights_tensor}")
+
         self._TRAIN.setLoadOnlyY(False)
-        return weights
+        return weights_tensor
+
 
     def setup(self, stage=None) -> None:
         if self._setup_done:

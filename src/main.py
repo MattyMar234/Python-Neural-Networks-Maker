@@ -280,8 +280,10 @@ def main() -> None:
         batch_size=args.batch_size,
         num_workers=args.workers,
         useTemporalSize=False,
-        year= Munich480.Year.Y2016,# | Munich480.Year.Y2017,
+        year= Munich480.Year.Y2016
     ) 
+    
+    
     
     
     NetworkModel: ModelBase = NetArchs.create_instance(args.arch, datamodule=datamodule, lr = args.lr)

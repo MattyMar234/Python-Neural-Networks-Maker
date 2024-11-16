@@ -15,7 +15,7 @@ import torch.nn.functional as F
 import os
 from os import listdir
 from enum import Enum, auto, Flag
-from typing import Final, Tuple
+from typing import Final, List, Tuple
 import asyncio
 import aiofiles
 
@@ -25,9 +25,15 @@ from functools import lru_cache
 
 class Munich480(Segmentation_Dataset_Base):
     
-    _EVAL_TILEIDS_FOLDER = os.path.join("tileids","val_folders.txt")
-    _TRAIN_TILEIDS_FOLDER = os.path.join("tileids", "train_folders.txt")
-    _TEST_TILEIDS_FOLDER = os.path.join("tileids", "test_folders.txt")
+    # _EVAL_TILEIDS_FOLDER = os.path.join("tileids","val_folders.txt")
+    # _TRAIN_TILEIDS_FOLDER = os.path.join("tileids", "train_folders.txt")
+    # _TEST_TILEIDS_FOLDER = os.path.join("tileids", "test_folders.txt")
+    _EVAL_TILEIDS_FOLDER = os.path.join("tileids","eval.tileids")
+    _TRAIN_TILEIDS_FOLDER = os.path.join("tileids", "train_fold0.tileids")
+    _TEST_TILEIDS_FOLDER = os.path.join("tileids", "test_fold0.tileids")
+    _FOLDER_2016: str = "data16"
+    _FOLDER_2017: str = "data17"
+    
     
     _semaphore = asyncio.Semaphore(10)
     _classLock = Lock()
@@ -74,12 +80,11 @@ class Munich480(Segmentation_Dataset_Base):
         assert type(mode) == Munich480.DatasetMode, "Invalid mode type"
         assert type(year) == Munich480.Year, "Invalid year type"
         
-        self._total_channels = Munich480.ImageChannelsCount
             
         
         Segmentation_Dataset_Base.__init__(
             self, 
-            imageSize = (Munich480.ImageWidth, Munich480.ImageHeight, self._total_channels, Munich480.TemporalSize if not useTemporalSize else 0), 
+            imageSize = (Munich480.ImageWidth, Munich480.ImageHeight, Munich480.ImageChannelsCount, Munich480.TemporalSize if not useTemporalSize else 0), 
             classesCount = 27, 
             x_transform=transforms,
             y_transform = transforms,
@@ -90,7 +95,7 @@ class Munich480(Segmentation_Dataset_Base):
         self._folderPath:str | None = folderPath
         self._years: Munich480.Year = year
         self._useTemporalSize: bool = useTemporalSize
-        self._temporalSize = Munich480.TemporalSize*len(self._years)
+     
         
         match mode:
             case Munich480.DatasetMode.TRAINING:
@@ -101,26 +106,76 @@ class Munich480(Segmentation_Dataset_Base):
                 
             case Munich480.DatasetMode.VALIDATION:
                 self._dataSequenze = np.loadtxt(os.path.join(self._folderPath, Munich480._EVAL_TILEIDS_FOLDER), dtype=int)
-                
+          
+            case _:
+                raise Exception(f"Invalid mode {mode}") 
         
-        #print(self._dataSequenze)
+        
+        temp = {
+           Munich480.Year.Y2016 : Munich480._FOLDER_2016,
+           Munich480.Year.Y2017 : Munich480._FOLDER_2017
+        }
+        
+        print(f"{str(mode).split('.')[1]} dataset total {len(self._dataSequenze)} samples")
+        
+        years_sequenze: Dict[str, any] = dict()
+        range = 0
+           
+        for available_year in Munich480.Year:
+            if available_year in year:
+                available_folder = os.listdir(os.path.join(self._folderPath, temp[available_year]))
+                temp_dict: Dict[str, bool] = dict.fromkeys(available_folder, True) 
+            
+                tempList: List[str] = list()
+
+                for idx in self._dataSequenze:
+                    if temp_dict.get(str(idx)) is not None and os.path.exists(os.path.join(self._folderPath, temp[available_year], str(idx), 'y.tif')):
+                        tempList.append(os.path.join(self._folderPath, temp[available_year], str(idx)))
+                
+                npList = np.array(tempList, dtype=object)
+                
+                years_sequenze[temp[available_year]] = {
+                    "sequenze" : npList,
+                    "range" : (range, range + len(tempList))
+                }
+                
+                print(f"Year {temp[available_year]} available samples: {len(tempList)} ")
+                range += len(tempList)
+         
+         
+        # print(npList)
+        # os._exit(0)
+        self._yearsSequenze = years_sequenze
+      
     
     
     def get_y_value(self, idx: int) -> Optional[torch.Tensor]:
         assert idx < self.__len__() and idx >= 0, f"Index {idx} out of range"
-        
-        idx = self._mapIndex(idx)
-        sequenzeFolder = os.path.join(self._folderPath, "data16", str(idx))
-        y = self._load_y(sequenzeFolder)
-        
+        y = self._load_y(self._mapIndex(idx))
         return torch.from_numpy(y).int()
     
     
     
-    
-    def _mapIndex(self, index: int) -> int:
-        return self._dataSequenze[index]
-    
+    def _mapIndex(self, index: int) -> str:
+        
+        '''
+        Dall'indice ritorna il percorso del folder
+        '''
+        
+        for year in self._yearsSequenze.keys():
+            year_range: Tuple[int, int] = self._yearsSequenze[year]["range"]
+            
+            if index >= year_range[0] and index < year_range[1]:
+                idx = index - year_range[0]
+                data_folder_path = self._yearsSequenze[year]["sequenze"][idx]
+                
+                
+                return data_folder_path#os.path.join(self._folderPath, year, str(data_folder_index))
+                
+        raise Exception(f"Index {index} not found in any year range")    
+        
+        
+        
     def get_dates(self, path: str, sample_number= int | None) -> list[str]:
         #assert os.path.exists(path), f"Path {path} does not exist"
     
@@ -185,12 +240,13 @@ class Munich480(Segmentation_Dataset_Base):
         return self._load_dif_file(filePath=os.path.join(folder, "y.tif"), normalize = False)["data"]
         
         
-    def _load_year_sequenze(self, year: str, number: str) -> dict[str, any]:
-        sequenzeFolder = os.path.join(self._folderPath, year, str(number))
+    def _load_year_sequenze(self, idx: str) -> dict[str, any]:
+        
+        sequenzeFolder = self._mapIndex(idx)
         dates = self.get_dates(path=sequenzeFolder, sample_number=Munich480.TemporalSize)
         profile = None
         #torch.empty
-        x: torch.Tensor = torch.empty((Munich480.TemporalSize, self._total_channels, Munich480.ImageHeight, Munich480.ImageWidth), dtype=torch.float32)
+        x: torch.Tensor = torch.empty((Munich480.TemporalSize, Munich480.ImageChannelsCount, Munich480.ImageHeight, Munich480.ImageWidth), dtype=torch.float32)
         
         # Mappa per associare le distanze ai suffissi dei file
         distance_map = {
@@ -232,29 +288,38 @@ class Munich480(Segmentation_Dataset_Base):
         
                 
     def _getSize(self) -> int:
-        return np.size(self._dataSequenze)        
+        maxValue = 0
+        
+        for year in self._yearsSequenze.keys():
+            maxValue = max(maxValue, (self._yearsSequenze[year]["range"][1]))
+        
+        
+        return maxValue        
 
-    def _load_data(self, idx: int) -> Dict[str, any]:
+    # def _load_data(self, idx: int) -> Dict[str, any]:
+    #     idx
         
-        if Munich480.Year.Y2016 in self._years and not (Munich480.Year.Y2017 in self._years):
-            return self._load_year_sequenze("data16", str(idx))
         
-        elif not (Munich480.Year.Y2016 in self._years) and Munich480.Year.Y2017 in self._years:
-            return self._load_year_sequenze("data17", str(idx))
+    #     if Munich480.Year.Y2016 in self._years and not (Munich480.Year.Y2017 in self._years):
+    #         return self._load_year_sequenze("data16", str(idx))
         
-        else:
-            x16_dict = self._load_year_sequenze("data16", str(idx))
-            x17_dict = self._load_year_sequenze("data17", str(idx))
+    #     elif not (Munich480.Year.Y2016 in self._years) and Munich480.Year.Y2017 in self._years:
+    #         return self._load_year_sequenze("data17", str(idx))
+        
+    #     else:
+    #         x16_dict = 
+    #         x17_dict = self._load_year_sequenze("data17", str(idx))
             
-            return {"x":torch.cat((x16_dict["x"], x17_dict["x"])), "y":x16_dict["y"], "profile" : x16_dict["profile"]}
+    #         return {"x":torch.cat((x16_dict["x"], x17_dict["x"])), "y":x16_dict["y"], "profile" : x16_dict["profile"]}
 
     
 
     def _getItem(self, idx: int) -> dict[str, any]:
-        idx = self._mapIndex(idx)
+        assert idx >= 0 and idx < self.__len__(), f"Index {idx} out of range"
+        
+        dictData = self._load_year_sequenze(idx)
     
-        #x, y = asyncio.run(self._load_data(idx))
-        dictData = self._load_data(idx)
+        
         x = dictData["x"]
         y = dictData["y"]
                 
@@ -300,20 +365,16 @@ class Munich480(Segmentation_Dataset_Base):
                 xy = self._x_transform(xy)
                 
                 # Separare x e y dopo la trasformazione
-                x = xy[:, :self._temporalSize, :, :]  # I primi 32 canali vanno a x
-                y = xy[:, self._temporalSize:, :, :]  # I successivi 27 canali vanno a y
-
-
+                x = xy[:, :Munich480.TemporalSize, :, :]  # I primi 32 canali vanno a x
+                y = xy[:, Munich480.TemporalSize:, :, :]  # I successivi 27 canali vanno a y
                 y = y[0, 0, :, :]
             
             else:
-                
+
                 xy = torch.cat((x, y), dim=0)
                 xy = self._x_transform(xy)
-
-                x = xy[:self._temporalSize*self._total_channels, :, :]
-                y = xy[self._temporalSize*self._total_channels:, :, :]
-
+                x = xy[:Munich480.TemporalSize*Munich480.ImageChannelsCount, :, :]
+                y = xy[Munich480.TemporalSize*Munich480.ImageChannelsCount:, :, :]
                 y = y[0, :, :]
 
         
