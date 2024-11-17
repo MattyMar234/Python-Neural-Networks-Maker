@@ -1,3 +1,4 @@
+from Globals import *
 import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
@@ -5,16 +6,37 @@ import torch
 import lightning as L
 from torchinfo import summary
 from abc import ABC, abstractmethod
-from typing import Final, Protocol
+from typing import Dict, Final, Protocol
 import torchmetrics
 from torchmetrics import Metric
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
 from DatasetComponents.DataModule.DataModuleBase import DataModuleBase
+import Globals
 from Networks.Metrics.ConfusionMatrix import ConfusionMatrix
 from .NeuralNetworkBase import LightModelBase, ModelBase
 import torchmetrics
 from enum import Enum, auto
 
+
+class ShedulerType(Enum):
+
+    LINEAR = "linearLR"
+    EXP = "expLR"
+    STEP = "stepLR"
+    COSINE = "cosine"
+    COSINE_RESTARTS = "cosineWR"
+    CONSTANT = "constantLR"
+    POLY = "polyLR"
+    MULTI_STEP = "multistepLR"
+    #MULTI_STEP_DECAY = "multi_step_decay"
+    # ONE_CYCLE = "one_cycle"
+    # ONE_CYCLE_DECAY = "one_cycle_decay"
+    NONE = "none"
+    
+    @classmethod
+    def values(cls):
+        """Returns a list of all the enum values."""
+        return list(cls._value2member_map_.keys())
 
 
 
@@ -51,6 +73,83 @@ class TraingBase(LightModelBase):
         self._last_avg_trainLoss: float = -1.0
         self._last_avg_valLoss: float = -1.0
     
+    
+    def _make_sheduler(self, optimizer) -> Dict[str, any]:
+        
+        scheduler: Dict[str, any] = {}
+        shedulerType: ShedulerType = ShedulerType(self._kwargs[Globals.SCHEDULER_TYPE])
+        scheduler['interval'] = self._kwargs[Globals.SCHEDULER_STEP_TYPE]
+        
+        match shedulerType:
+            case ShedulerType.NONE:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self._kwargs[START_FACTOR], end_factor=self._kwargs[END_FACTOR], total_iters=self._kwargs[EPOCHS])
+                
+            case ShedulerType.LINEAR:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self._kwargs[START_FACTOR], end_factor=self._kwargs[END_FACTOR], total_iters=self._kwargs[EPOCHS])
+            
+            case ShedulerType.EXP:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=self._kwargs[SCHEDULER_GAMMA])
+            
+            case ShedulerType.STEP:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self._kwargs[SCHEDULER_STEP_SIZE], gamma=self._kwargs[SCHEDULER_GAMMA])
+            
+            case ShedulerType.COSINE:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self._kwargs[SCHEDULER_STEP_SIZE], eta_min=self._kwargs[ETA_MIN])
+            
+            case ShedulerType.COSINE_RESTARTS:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=self._kwargs[SCHEDULER_STEP_SIZE], T_mult=self._kwargs[T_MULT], eta_min=self._kwargs[ETA_MIN])
+            
+            case ShedulerType.CONSTANT:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=self._kwargs[FACTOR], total_iters=self._kwargs[SCHEDULER_STEP_SIZE])
+            
+            case ShedulerType.POLY:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=self._kwargs[SCHEDULER_STEP_SIZE], power=self._kwargs[POWER])
+            
+            case ShedulerType.MULTI_STEP:
+                scheduler['scheduler'] = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=self._kwargs[MILESTONES], gamma=self._kwargs[SCHEDULER_GAMMA])
+            
+            # case ShedulerType.MULTI_STEP_DECAY:
+            #     scheduler['scheduler'] = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self._kwargs[MILESTONES], gamma=self._kwargs[SCHEDULER_GAMMA])
+            
+            # case ShedulerType.ONE_CYCLE:
+            #     scheduler['scheduler'] = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=0.1, total_steps=100)
+            
+            # case ShedulerType.ONE_CYCLE_DECAY:
+            #     scheduler['scheduler'] = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=0.1, total_steps=100, anneal_strategy='linear')
+            
+                
+            case _:
+                raise ValueError(f"Invalid sheduler type: {shedulerType}")
+        
+        Globals.APP_LOGGER.info(f"Scheduler: {scheduler}")
+        
+        if self.trainer.current_epoch > 0:
+            Globals.APP_LOGGER.info(f"update scheduler epoch")
+            scheduler.last_epoch = self.trainer.current_epoch - 1
+        
+        
+        return scheduler
+    
+    def on_load_checkpoint(self, checkpoint: dict) -> None:
+        # Modifica il checkpoint prima che venga caricato
+        
+        if 'optimizer_states' in checkpoint:
+            #checkpoint.pop('optimizer_states', None)  # Rimuovi lo stato dell'optimizer
+
+            optimizer_states = checkpoint['optimizer_states']
+            
+            # Supponiamo di voler modificare il learning rate nel stato dell'optimizer
+            for optimizer_state in optimizer_states:
+                for group in optimizer_state['param_groups']:
+                    # Cambia il learning rate a 0.001 (o qualsiasi valore tu voglia)
+                    group['lr'] = self._learning_rate
+
+        return checkpoint
+    
+    # @abstractmethod 
+    # def configure_optimizers(self) -> tuple[list, list]:
+    #     optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
+    #     return [optimizer], [self._make_sheduler()]
     
     @abstractmethod  
     def _commonStep(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
@@ -167,13 +266,13 @@ class ImageClassificationBase(TraingBase):
         super().__init__(**kwargs)
         
             
-    def configure_optimizers(self) -> tuple[list, list] :
-        optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
-        scheduler = {
-            'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1),
-            'interval': 'epoch',
-        }
-        return [optimizer], [scheduler]
+    # def configure_optimizers(self) -> tuple[list, list] :
+    #     optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
+    #     scheduler = {
+    #         'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1),
+    #         'interval': 'epoch',
+    #     }
+    #     return [optimizer], [scheduler]
     
 
 
@@ -181,15 +280,6 @@ class Semantic_ImageSegmentation_TrainingBase(TraingBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     
-    def configure_optimizers(self) -> tuple[list, list]:
-        optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
-        scheduler = {
-            'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5),
-            'interval': 'epoch',
-            
-        }
-        
-        return [optimizer], [scheduler]
     
     def configure_loss(self) -> nn.Module:
         
@@ -199,6 +289,25 @@ class Semantic_ImageSegmentation_TrainingBase(TraingBase):
             #return nn.NLLLoss()
             print(f"CrossEntropyLoss loadded weights: {self._datamodule.getWeights}")
             return nn.CrossEntropyLoss(weight=self._datamodule.getWeights)
+    
+    
+    def configure_optimizers(self) -> tuple[list, list]:
+        optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
+        scheduler = self._make_sheduler(optimizer)
+        
+        
+        # scheduler.last_epoch = self.current_epoch
+        # scheduler.get_lr()  # Questo aggiorna internamente il learning rate del scheduler
+        # new_lr = optimizer.param_groups[0]['lr']
+        
+        # # Aggiorna manualmente l'LR (se necessario)
+        # for param_group in optimizer.param_groups:
+        #     param_group['lr'] = new_lr  # Ricalcola e aggiorna l'LR
+        
+        Globals.APP_LOGGER.info(f"lr: {optimizer.param_groups[0]['lr']}")
+        
+        
+        return [optimizer], [scheduler]
     
     def compute_accuracy_metric(self, values: dict[str, any], batch_x: torch.Tensor, batch_y: torch.Tensor) -> None :
         predicted_classes = torch.argmax(values['y_hat'], dim=1)   # shape: (1, 48, 48)

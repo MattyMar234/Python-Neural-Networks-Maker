@@ -14,6 +14,7 @@ import seaborn as sns
 
 from sklearn.utils.class_weight import compute_class_weight
 from DatasetComponents.Datasets.munich480 import Munich480
+import Globals
 
 from .DataModuleBase import *
 from torch.utils.data import DataLoader
@@ -225,13 +226,13 @@ class Munich480_DataModule(DataModuleBase):
             prefetch_factor=None
         )
         
-        print("Calulating classes weight...")
+        Globals.APP_LOGGER.info("Calulating classes weight...")
         
         y_flat: torch.Tensor = torch.empty((len(self._TRAIN) * Munich480_DataModule.ImageWidth * Munich480_DataModule.ImageHeight), dtype=torch.uint8)
         index: int = 0
     
         for i, (_, y) in enumerate(temp_loader):
-            print(f"Loading: {min((i+1)*batch_size, len(self._TRAIN))}/{len(self._TRAIN)}", end="\r")
+            print(f"Loading: {min(i + 1, len(temp_loader))}/{len(temp_loader)}", end="\r")
             
             y = y.flatten()
             elementCount = y.shape[0]
@@ -273,7 +274,7 @@ class Munich480_DataModule(DataModuleBase):
         weights[available_classes] = class_weights
         weights_tensor = torch.tensor(weights, dtype=torch.float32)
 
-        print(f"Calculated classes weight: {weights_tensor}")
+        Globals.APP_LOGGER.info(f"Calculated classes weight: {weights_tensor}")
 
         self._TRAIN.setLoadOnlyY(False)
         return weights_tensor

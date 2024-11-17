@@ -4,6 +4,8 @@ from matplotlib import pyplot as plt
 import matplotlib
 import rasterio
 
+import Globals
+
 
 from .ImageDataset import *
 from .DatasetBase import *
@@ -116,7 +118,9 @@ class Munich480(Segmentation_Dataset_Base):
            Munich480.Year.Y2017 : Munich480._FOLDER_2017
         }
         
-        print(f"{str(mode).split('.')[1]} dataset total {len(self._dataSequenze)} samples")
+        
+        
+        Globals.APP_LOGGER.info(f"{str(mode).split('.')[1]} dataset total samples: {len(self._dataSequenze)}")
         
         years_sequenze: Dict[str, any] = dict()
         range = 0
@@ -139,7 +143,7 @@ class Munich480(Segmentation_Dataset_Base):
                     "range" : (range, range + len(tempList))
                 }
                 
-                print(f"Year {temp[available_year]} available samples: {len(tempList)} ")
+                Globals.APP_LOGGER.info(f"Year {temp[available_year]} available samples: {len(tempList)} ")
                 range += len(tempList)
          
          

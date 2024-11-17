@@ -1,4 +1,6 @@
 
+import json
+import logging.config
 import sys
 import torch
 from torchvision import transforms
@@ -14,6 +16,8 @@ from Database.Tables import *
 
 from DatasetComponents.Datasets.DatasetBase import DatasetBase
 from DatasetComponents.Datasets.munich480 import Munich480
+import Globals
+from LoggerSetup import setupLogging
 from Networks.Architettures.SemanticSegmentation.UNet import UNET_2D
 import Networks.Architettures as NetArchs
 from Networks.Metrics.ConfusionMatrix import *
@@ -24,24 +28,32 @@ from Networks.NetworkComponents.NeuralNetworkBase import *
 import argparse 
 from pathlib import Path
 import time
+from Globals import *
+from dotenv import load_dotenv
 
 from Utility.TIF_creator import TIF_Creator
+import logging.config
+import logging
 
 
 
 
-MODELS_OUTPUT_FOLDER = os.path.join(Path(os.getcwd()).parent.absolute(), 'Models')
+
 
 
 def check_pytorch_cuda() -> bool:
-    print("PyTorch Version: ", torch.__version__)
+    Globals.APP_LOGGER.info(f"PyTorch Version: {torch.__version__}")
+    
     if torch.cuda.is_available():
-        print("CUDA is available \nDevice found: ", torch.cuda.device_count())
+        Globals.APP_LOGGER.info("CUDA is available.")
+        Globals.APP_LOGGER.info(f"Device found: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
-            print(f"Device {i}: {torch.cuda.get_device_name(i)}")
+            Globals.APP_LOGGER.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
+        
         return True
+    
     else:
-        print("CUDA is not available.")
+        Globals.APP_LOGGER.info("CUDA is not available.")
         return False
 
 def trainModel(args: argparse.Namespace | None, device: str, datamodule: DataModuleBase, model: ModelBase) -> None:
@@ -202,8 +214,12 @@ def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModu
 
 def main() -> None:
     
-  
+    setupLogging()
+    load_dotenv()
+    
     error: bool = False
+    
+    
     
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -213,20 +229,34 @@ def main() -> None:
     parser.add_argument('--dataset',           type=str,    default='?',             choices=['lombardia', 'munich'])
     parser.add_argument('--test_id',           type=str,    default='A',             choices=['A', 'Y'])
     parser.add_argument('--arch',              type=str,    default='?',             choices= NetArchs.AvailableArchitetture.keys())
-    parser.add_argument('-e', '--epochs',      type=int,    default=1)
+    parser.add_argument('-e', f'--{Globals.EPOCHS}',   type=int,    default=1)
     parser.add_argument('-b', '--batch_size',  type=int,    default=2)
     parser.add_argument('-w', '--workers',     type=int,    default=0)
-    parser.add_argument('--lr',                type=float,  default=1e-4,            help='learning rate')
     parser.add_argument('-d', '--gpu_or_cpu',  type=str,    default='gpu',           choices=['gpu', 'cpu'])
     parser.add_argument('--gpus',              type=int,    default=[0],             nargs='+')
     parser.add_argument('--idx',               type=int,    default=0)
+    
+    parser.add_argument(f'--{Globals.LEARNING_RATE}',       type=float, default=1e-4,            help='learning rate')
+    parser.add_argument(f'--{Globals.SCHEDULER_TYPE}',      type=str,   default=ShedulerType.NONE, choices=ShedulerType.values())
+    parser.add_argument(f'--{Globals.SCHEDULER_GAMMA}',     type=float, default=1.0)
+    parser.add_argument(f'--{Globals.SCHEDULER_STEP_SIZE}', type=int,   default=1)
+    parser.add_argument(f'--{Globals.SCHEDULER_STEP_TYPE}', type=str,   default='epoch', choices=SCHEDULER_STEP_TYPE_AVAILABLE)
+    parser.add_argument(f'--{Globals.T_MAX}',               type=int,   default=10)
+    parser.add_argument(f'--{Globals.T_MULT}',              type=float, default=1.0)
+    parser.add_argument(f'--{Globals.ETA_MIN}',             type=float, default=0.0)
+    parser.add_argument(f'--{Globals.FACTOR}',              type=float, default=1.0)
+    parser.add_argument(f'--{Globals.START_FACTOR}',        type=float, default=1)
+    parser.add_argument(f'--{Globals.END_FACTOR}',          type=float, default=1)
+    parser.add_argument(f'--{str(Globals.MILESTONES)}',     type=str,   default=[10], nargs='+')
+    parser.add_argument(f'--{Globals.POWER}',               type=float, default=1)
+    
     parser.add_argument('--summary',    action='store_true')
     parser.add_argument('--test' ,      action='store_true')
     parser.add_argument('--train',      action='store_true')
     parser.add_argument('--compile',    action='store_true')
 
     #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0 --ckpt_path /app/Models/UNET_2D/checkpoints/epoch=9-avg_val_loss=0.43453678.ckpt
-     #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0
+    #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0
     #python main.py --train --worker 12 --batch_size 2 --epochs 40 --arch UNET_2D --ckpt_path /app/Models/UNET_2D/checkpoints/last.ckpt --lr=1e-3
     
     # parser.add_argument("--devices", type=int, default=0)
@@ -242,30 +272,30 @@ def main() -> None:
     
     
     if not args.test and not args.train and not args.summary:
-        print("Please specify either --test, --train or --summary")
+        Globals.APP_LOGGER.error("Please specify either --test, --train or --summary")
         error = True
     
     if args.test and args.ckpt_path == None:
-        print("Please specify checkpoint path with --ckpt_path")
+        Globals.APP_LOGGER.error("Please specify checkpoint path with --ckpt_path")
         error = True
     
     if not args.arch:
-        print("Please specify architecture with --arch")
+        Globals.APP_LOGGER.error("Please specify architecture with --arch")
         error = True  
          
     if error:
         sys.exit(1)
         
-    print(args)
+    Globals.APP_LOGGER.info(args)
     
     device: torch.device = torch.device("cuda" if args.gpu_or_cpu == 'gpu' and check_pytorch_cuda() else "cpu")
-    print(f"Device selected: {device}") 
+    Globals.APP_LOGGER.info(f"Device selected: {device}") 
     
     if device.type == 'cuda' :
         deviceName = torch.cuda.get_device_name(device=None)
         
         if deviceName == 'NVIDIA GeForce RTX 3060 Ti':
-            print(f"set float32 matmul precision to \'medium\'")
+            Globals.APP_LOGGER.info(f"set float32 matmul precision to \'medium\'")
             torch.set_float32_matmul_precision('medium')
             
             """You are using a CUDA device ('NVIDIA GeForce RTX 3060 Ti') that 
@@ -286,7 +316,9 @@ def main() -> None:
     
     
     
-    NetworkModel: ModelBase = NetArchs.create_instance(args.arch, datamodule=datamodule, lr = args.lr)
+    
+    
+    NetworkModel: ModelBase = NetArchs.create_instance(args.arch, datamodule=datamodule, **vars(args))
     
     #UNET_2D_Model: ModelBase = UNET_2D(in_channel=datamodule.number_of_channels(), out_channel=datamodule.number_of_classes(), inputSize= datamodule.input_size())
     

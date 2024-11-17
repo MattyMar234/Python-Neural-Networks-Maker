@@ -14,16 +14,15 @@
 		"": {
 			"level": "INFO",
 			"handlers": [
-				"console",
-				"file"
+				"console"
 			]
 		},
 
-		"appData": {
+		"appInfo": {
 			"level": "INFO",
 			"propagate": false,
 			"handlers": [
-				"file"
+				"console"
 			]
 		},
 
@@ -31,7 +30,6 @@
             "level": "INFO",
             "propagate": false,
             "handlers": [
-                "database",
                 "console"
             ]
         },
@@ -40,7 +38,6 @@
             "level": "INFO",
             "propagate": false,
             "handlers": [
-                "training",
                 "console"
             ]
         }
@@ -52,29 +49,7 @@
 			"level": "DEBUG",
 			"formatter": "simple",
 			"stream": "ext://sys.stdout"
-		},
-		"file": {
-			"class": "logging.handlers.RotatingFileHandler",
-			"level": "INFO",
-			"formatter": "simple",
-			"filename": "logs/app.log",
-			"encoding": "utf8"
-		},
-		"training": {
-			"class": "logging.handlers.RotatingFileHandler",
-			"level": "INFO",
-			"formatter": "simple",
-			"filename": "logs/training.log",
-			"encoding": "utf8"
-		},
-        "database" : {
-            "class": "logging.FileHandler",
-            "level": "INFO",
-            "formatter": "detailed",
-            "filename": "logs/database.log",
-			"encoding": "utf8"
-
-        }
+		}
 	}
 	
 }
