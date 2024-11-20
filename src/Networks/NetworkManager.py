@@ -336,5 +336,3 @@ class NetworkManager:
         predicted_probability = all_probabilities[0, predicted_class_index].item()
         
         return predicted_class_index, predicted_probability, all_probabilities
-
-    

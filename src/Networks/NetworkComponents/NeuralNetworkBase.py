@@ -104,7 +104,25 @@ class Conv2dBlock(nn.Module):
     def forward(self, x):
         return self.convolutionBlock(x)
     
+
+class Squeezer(nn.Module):
     
+    def __init__(self, axes):
+        super(Squeezer, self).__init__()
+        self.axes = axes
+    
+    def forward(self, x):
+        return x.squeeze(self.axes)  
+    
+class UnSqueezer(nn.Module):
+
+    def __init__(self, axes):
+        super(UnSqueezer, self).__init__()
+        self.axes = axes
+
+    def forward(self, x):
+        return x.unsqueeze(self.axes)    
+
 
 class Multiple_Conv2D_Block(nn.Module):
         def __init__(self, num_convs: int, in_channels: int, out_channels: int, kernel_size: int, stride: int, padding: int, bias: bool):

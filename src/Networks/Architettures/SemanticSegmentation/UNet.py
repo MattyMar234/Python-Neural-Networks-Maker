@@ -55,7 +55,7 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
             #Eseguo le due convoluzioni 
             x = self._DecoderBlocks[i+1](concat_skip)
 
-        return self._OutputLayer[0](x)
+        return self._OutputLayer(x)
 
 
 class UNET_2D(_UnetBase):
@@ -211,33 +211,33 @@ class UNet_3D(_UnetBase):
                 )
             )
             self._DecoderBlocks.append(
-                Multiple_Conv2D_Block(
+                Multiple_Conv3D_Block(
                     num_convs=2,
                     in_channels=feature*2,
                     out_channels=feature,
-                    kernel_size=3,
-                    stride=1,
-                    padding=1,
+                    kernel_size=(3,3,3),
+                    stride=(1,1,1),
+                    padding=(1,1,1),
                     bias=True
                 )
             )
             
-        self._OutputLayer.append(
+            
+        self._OutputLayer = nn.Sequential(
             nn.Conv3d(
                 in_channels=_UnetBase._FEATURES[0],
                 out_channels=1,
-                kernel_size=1,
-                stride=1,
+                kernel_size=(1,1,1),
+                stride=(1,1,1),
                 padding=0,
                 bias=True
-            )
-        )
-        self._OutputLayer.append(
+            ),
+            Squeezer(1),
             nn.Conv2d(
                 in_channels=self._depth, 
                 out_channels=self._out_channel, 
-                kernel_size=1, 
-                stride=1, 
+                kernel_size=(1,1), 
+                stride=(1,1), 
                 padding=0, 
                 bias=True
             )

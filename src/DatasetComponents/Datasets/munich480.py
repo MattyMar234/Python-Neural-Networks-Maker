@@ -161,7 +161,6 @@ class Munich480(Segmentation_Dataset_Base):
     
     
     def _mapIndex(self, index: int) -> str:
-        
         '''
         Dall'indice ritorna il percorso del folder
         '''
@@ -206,6 +205,9 @@ class Munich480(Segmentation_Dataset_Base):
         dates.sort()
         return dates
     
+    def getItemInfo(self, idx: int) -> Dict[str,any]:
+        return self._load_dif_file(filePath=os.path.join(self._mapIndex(idx), "y.tif"), normalize = False)["profile"]
+    
     
     def _normalize_dif_data(self, data: np.array, profile) -> np.array:
         # return ((data - np.min(data)) / (np.max(data) - np.min(data)) * 255).astype(np.uint8)
@@ -231,9 +233,6 @@ class Munich480(Segmentation_Dataset_Base):
             data = src.read()
             data = data.astype(np.float32)
             profile = src.profile
-            
-            # if profile['nodata'] == None:
-            #     profile.pop('nodata')
             
         if normalize:
             data = self._normalize_dif_data(data = data, profile = profile)
@@ -287,35 +286,14 @@ class Munich480(Segmentation_Dataset_Base):
         y = self._load_y(sequenzeFolder)
         return {"x": x, "y": y, "profile": profile}
     
-   
-    
-        
-                
+      
     def _getSize(self) -> int:
         maxValue = 0
         
         for year in self._yearsSequenze.keys():
             maxValue = max(maxValue, (self._yearsSequenze[year]["range"][1]))
         
-        
         return maxValue        
-
-    # def _load_data(self, idx: int) -> Dict[str, any]:
-    #     idx
-        
-        
-    #     if Munich480.Year.Y2016 in self._years and not (Munich480.Year.Y2017 in self._years):
-    #         return self._load_year_sequenze("data16", str(idx))
-        
-    #     elif not (Munich480.Year.Y2016 in self._years) and Munich480.Year.Y2017 in self._years:
-    #         return self._load_year_sequenze("data17", str(idx))
-        
-    #     else:
-    #         x16_dict = 
-    #         x17_dict = self._load_year_sequenze("data17", str(idx))
-            
-    #         return {"x":torch.cat((x16_dict["x"], x17_dict["x"])), "y":x16_dict["y"], "profile" : x16_dict["profile"]}
-
     
 
     def _getItem(self, idx: int) -> dict[str, any]:
@@ -341,6 +319,11 @@ class Munich480(Segmentation_Dataset_Base):
         y = torch.from_numpy(y)
         
         #x = x.float()
+        
+        
+        y = torch.Tensor(self._one_hot_encode_no_cache(y))
+        y = y.float()
+        y = y.permute(2,0,1)# -> (c x h x w)
    
         dictData['x'] = x
         dictData['y'] = y
@@ -358,35 +341,44 @@ class Munich480(Segmentation_Dataset_Base):
         
         if self._x_transform is not None:
             
-            y = y.unsqueeze(0)
+            #y = y.unsqueeze(0)
             
             if self._useTemporalSize:
+        
+                #torch.Size([27, 48, 48]) -> torch.Size([1, 27, 48, 48])
                 y = y.unsqueeze(0)
-            
+                
+                #torch.Size([1, 27, 48, 48]) -> torch.Size([13, 27, 48, 48])
                 y = y.repeat(13, 1, 1, 1)
                 
+                
+                #torch.Size([13, 32, 48, 48]) ° torch.Size([13, 27, 48, 48])
+                # ->torch.Size([13, 59, 48, 48])
                 xy = torch.cat((x, y), dim=1)
                 xy = self._x_transform(xy)
                 
                 # Separare x e y dopo la trasformazione
                 x = xy[:, :Munich480.TemporalSize, :, :]  # I primi 32 canali vanno a x
                 y = xy[:, Munich480.TemporalSize:, :, :]  # I successivi 27 canali vanno a y
-                y = y[0, 0, :, :]
-            
+                
+                #torch.Size([13, 27, 48, 48]) -> torch.Size([27, 48, 48])
+                #y = y[0, 0, :, :]
+                y = y[0, :, :, :]
             else:
+
 
                 xy = torch.cat((x, y), dim=0)
                 xy = self._x_transform(xy)
                 x = xy[:Munich480.TemporalSize*Munich480.ImageChannelsCount, :, :]
                 y = xy[Munich480.TemporalSize*Munich480.ImageChannelsCount:, :, :]
-                y = y[0, :, :]
+                #y = y[0, :, :]
 
         
-        if self._oneHot:
-            y = torch.Tensor(self._one_hot_encode_no_cache(y))
+        # if self._oneHot:
+        #     y = torch.Tensor(self._one_hot_encode_no_cache(y))
         
-        y = y.float()
-        y = y.permute(2,0,1)# -> (c x h x w)
+        # y = y.float()
+        # y = y.permute(2,0,1)# -> (c x h x w)
 
         items['x'] = x
         items['y'] = y

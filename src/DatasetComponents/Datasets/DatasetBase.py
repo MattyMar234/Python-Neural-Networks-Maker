@@ -63,6 +63,10 @@ class DatasetBase(Dataset):
     def getItems(self, idx: int) -> Dict[str,any]:
         return self._getItem(idx)
     
+    @abstractmethod
+    def getItemInfo(self, idx: int) -> Dict[str,any]:
+        raise NotImplementedError("getItemInfo method must be implemented")
+    
     def __len__(self) -> int:
         if self._DatasetSize is None:
             self._DatasetSize = self._getSize()

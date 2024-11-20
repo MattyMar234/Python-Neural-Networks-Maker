@@ -9,6 +9,7 @@ MODELS_OUTPUT_FOLDER = os.path.join(DATA_PATH, 'Models')
 
 #============================= args key =============================#
 EPOCHS: Final[str] = 'epochs'
+PREFETCH_FACTOR: Final[str] = 'prefetch_factor'
 
 LEARNING_RATE: Final[str] = 'lr'
 SCHEDULER_TYPE: Final[str] = 'sch'

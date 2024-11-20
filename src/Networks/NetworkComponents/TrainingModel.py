@@ -54,8 +54,8 @@ class TraingBase(LightModelBase):
         self._kwargs = kwargs
         self._learning_rate: float = kwargs['lr']
         
-        if self._learning_rate is None or (self._learning_rate > 1 or self._learning_rate < 0):
-            self._learning_rate = 1e-3
+        # if self._learning_rate is None or (self._learning_rate > 1 or self._learning_rate < 0):
+        #     self._learning_rate = 1e-3
         
         self.save_hyperparameters()
         #self.save_hyperparameters(ignore=['net'])
@@ -72,10 +72,13 @@ class TraingBase(LightModelBase):
     
         self._last_avg_trainLoss: float = -1.0
         self._last_avg_valLoss: float = -1.0
+        self._printStart_lr: bool = False
+        
     
     
     def _make_sheduler(self, optimizer) -> Dict[str, any]:
         
+        print(f"_make_sheduler optimizer: {optimizer}")
         scheduler: Dict[str, any] = {}
         shedulerType: ShedulerType = ShedulerType(self._kwargs[Globals.SCHEDULER_TYPE])
         scheduler['interval'] = self._kwargs[Globals.SCHEDULER_STEP_TYPE]
@@ -127,22 +130,24 @@ class TraingBase(LightModelBase):
             Globals.APP_LOGGER.info(f"update scheduler epoch")
             scheduler.last_epoch = self.trainer.current_epoch - 1
         
-        
         return scheduler
     
     def on_load_checkpoint(self, checkpoint: dict) -> None:
         # Modifica il checkpoint prima che venga caricato
         
+        data = self.configure_optimizers()
+        
+      
+        # Cambia il valore del learning rate nell'optimizer
         if 'optimizer_states' in checkpoint:
-            #checkpoint.pop('optimizer_states', None)  # Rimuovi lo stato dell'optimizer
-
-            optimizer_states = checkpoint['optimizer_states']
-            
-            # Supponiamo di voler modificare il learning rate nel stato dell'optimizer
-            for optimizer_state in optimizer_states:
+            for optimizer_state in checkpoint['optimizer_states']:
                 for group in optimizer_state['param_groups']:
-                    # Cambia il learning rate a 0.001 (o qualsiasi valore tu voglia)
                     group['lr'] = self._learning_rate
+            #print(f"on_load_checkpoint: {checkpoint['optimizer_states']}")
+        
+        if 'lr_schedulers' in checkpoint:
+            checkpoint['lr_schedulers'] = data[1]
+
 
         return checkpoint
     
@@ -174,6 +179,15 @@ class TraingBase(LightModelBase):
         
     #================================== STEPS ==================================#
     def training_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int):
+        
+        if self._printStart_lr:
+            t_dict = {
+                TraingBase.LR_LABEL_NAME: self.lr_schedulers().get_last_lr()[0]  # Ottieni il learning rate attuale
+            }
+        
+            self.log_dict(t_dict, on_step=True, prog_bar=True)
+            self._printStart_lr = False
+        
         batch_imgs, batch_labels = batch
         values = self._commonStep(x=batch[0], y=batch[1], batch_idx=batch_idx)
         
@@ -215,6 +229,10 @@ class TraingBase(LightModelBase):
         return y_hat
     
     #================================== EPOCHS ==================================#
+    def on_train_epoch_start(self):
+        self._printStart_lr = True
+        
+    
     def on_train_epoch_end(self):
         
         '''Calcolo il valore della loss media della fase di training'''
@@ -225,6 +243,17 @@ class TraingBase(LightModelBase):
         
 
     def on_validation_epoch_end(self):
+        
+        if self.trainer.sanity_checking:
+            self.train_loss_metric.reset()
+            self.val_loss_metric.reset()
+            self.val_accuracy_metric.reset()
+            self.confusion_matrix_metric.reset()
+            return
+        
+        self.save_epoch_metrics()
+
+    def save_epoch_metrics(self, onlyOnProgressBar: bool = False):
         
         '''Calcolo il valore della loss media della fase di validation e calcolo
             il valore dell'accuratezza. E in fine plotto i valori. 
@@ -240,8 +269,6 @@ class TraingBase(LightModelBase):
         self.val_accuracy_metric.reset()
         self.confusion_matrix_metric.reset()
         
-        
-
         t_dict = {
             TraingBase.AVG_TRAINING_LOSS_LABEL_NAME : self._last_avg_trainLoss,
             TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME : self._last_avg_valLoss,
@@ -249,16 +276,15 @@ class TraingBase(LightModelBase):
             TraingBase.LR_LABEL_NAME: self.lr_schedulers().get_last_lr()[0]  # Ottieni il learning rate attuale
         }
         
-        #if not self.sanity_checking:
+        
         for logger in self.loggers:
             if isinstance(logger, TensorBoardLogger):
                 logger.experiment.add_image(f"Confusion Matrix epoch {self.current_epoch}", image_tensor, global_step=self.current_epoch)
-            #self.save_epoch_metrics()
+    
+                logger.experiment.add_scalars(f"losses", {TraingBase.AVG_TRAINING_LOSS_LABEL_NAME : self._last_avg_trainLoss}, global_step=self.current_epoch)
+                logger.experiment.add_scalars(f"losses", {TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME : self._last_avg_valLoss}, global_step=self.current_epoch)
         
         self.log_dict(t_dict, on_epoch=True, prog_bar=True)
-    
-    def save_epoch_metrics(self, data: dict[str, any]):
-        data['epoch'] = self.current_epoch
 
 
 class ImageClassificationBase(TraingBase):
@@ -306,6 +332,10 @@ class Semantic_ImageSegmentation_TrainingBase(TraingBase):
         
         Globals.APP_LOGGER.info(f"lr: {optimizer.param_groups[0]['lr']}")
         
+        # return {
+        #     'optimizer': optimizer,
+        #     'lr_scheduler': scheduler
+        # }
         
         return [optimizer], [scheduler]
     

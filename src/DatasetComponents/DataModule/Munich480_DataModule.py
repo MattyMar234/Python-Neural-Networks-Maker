@@ -15,6 +15,9 @@ import seaborn as sns
 from sklearn.utils.class_weight import compute_class_weight
 from DatasetComponents.Datasets.munich480 import Munich480
 import Globals
+from Networks.Metrics.ConfusionMatrix import ConfusionMatrix
+from Networks.NetworkComponents.NeuralNetworkBase import *
+from Utility.TIF_creator import TIF_Creator
 
 from .DataModuleBase import *
 from torch.utils.data import DataLoader
@@ -37,6 +40,8 @@ def _generate_distinct_colors(num_classes: int) -> Dict[int, str]:
         rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
         hex_color = '#{:02x}{:02x}{:02x}'.format(int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
         colors[i] = hex_color
+        
+    colors[0] = '#333333'
     
     return colors
 
@@ -301,16 +306,99 @@ class Munich480_DataModule(DataModuleBase):
         return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
     
     
+    def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
+        self.setup()
+        
+        confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
     
+    
+        checkpoint = torch.load(kwargs["ckpt_path"], map_location=torch.device(device))
+        model.load_state_dict(checkpoint["state_dict"])
+        model.to(device)
+        model.eval()
+        
+        idx = kwargs["idx"]
+        
+        if idx >= 0:
+            idx = idx % len(self._TEST)
+
+            with torch.no_grad():  
+                data: Dict[str, any] = self._TEST.getItems(idx)
+                
+                x = data['x']
+                y = data['y']
+                y = y.unsqueeze(0)
+                x = x.to(device)
+                
+                y_hat = model(x.unsqueeze(0))
+                
+                y_hat_ = torch.argmax(y_hat, dim=1)
+                y_ = torch.argmax(y, dim=1)
+                
+                print(y_hat_.shape, y_.shape)
+    
+                y_ = y_.cpu().detach()
+                y_hat_ = y_hat_.cpu().detach()
+                
+                
+                confMatrix.update(y_pr=y_hat_, y_tr=y_)
+                _, graphData = confMatrix.compute(showGraph=False)
+                
+                confMatrix.reset()
+            
+                self.show_processed_sample(x, y_hat_, y_, idx, graphData)
+            return
+        
+        if idx == -1:
+            creator:TIF_Creator = TIF_Creator('/app/geoData')
+            
+            temp_loader = DataLoader(
+                self._TEST,  # Assuming self._TRAIN is a Dataset object
+                batch_size=1,  # Set batch_size=1 for individual sample processing
+                num_workers=kwargs["workers"],
+                shuffle=False,
+                persistent_workers=False,
+                pin_memory=False,
+                prefetch_factor=None
+            )
+            
+            for idx, (x, y) in enumerate(temp_loader):
+                print(f"Processing {idx}/{len(self._TEST)}\r")
+                with torch.no_grad():
+                    x = x.to(device)
+
+                    y_hat = model(x)
+
+                    y_hat_ = torch.argmax(y_hat, dim=1)
+                    y_ = torch.argmax(y, dim=0)
+
+                    profile = self._TEST.getItemInfo(idx)
+                    y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                    
+                    for i in range(48):
+                        for j in range(48):
+                            class_id = int(y_hat_[0, i, j])
+                            y_hat_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                    creator.makeTIF(f'{idx}.tif', profile, data =y_hat_RGB, channels = 3, width=48, height=48) 
+            
+        
+            creator.mergeTIFs('/app/merged.tif')
    
     
     
-    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = False) -> None:
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = True) -> None:
         assert x is not None, "x is None"
         assert y_hat is not None, "y_hat is None"
         assert y is not None, "y is None"
         
         
+        if len(y_hat.shape) == 3:
+            y_hat = y_hat.squeeze(0)
+        if len(y.shape) == 3:
+            y = y.squeeze(0)
+        
+        print(y_hat.shape, y.shape)
         
         x = x.cpu().detach()
         x = x.squeeze(0) # elimino la dimensione della batch
@@ -319,8 +407,6 @@ class Munich480_DataModule(DataModuleBase):
             x = x.permute(1, 0, 2, 3)
             x = x.reshape(-1, 48, 48)
             
-       
-        
         if X_as_Int:
             x = x.int()
         else :
@@ -331,7 +417,7 @@ class Munich480_DataModule(DataModuleBase):
             x = x.clamp(0, 255)
             
         
-        y_hat = y_hat.cpu().detach().squeeze(0)
+        y_hat = y_hat.cpu().detach()
         y = y.cpu().detach()
         
         
@@ -367,8 +453,8 @@ class Munich480_DataModule(DataModuleBase):
         color_list = [color for _, color in sorted(Munich480_DataModule.MAP_COLORS.items())]
         cmap = ListedColormap(color_list)
         
-        label_map = y.argmax(dim=0).numpy()         # Etichetta per l'immagine corrente
-        pred_map = y_hat.argmax(dim=0).numpy()      # Predizione con massimo di ciascun layer di `y_hat`
+        label_map = y.numpy()         # Etichetta per l'immagine corrente
+        pred_map = y_hat.numpy()      # Predizione con massimo di ciascun layer di `y_hat`
         
         fig2, axes2 = plt.subplots(1, 2, figsize=(10, 5))
         fig2.suptitle("Feature Maps: Label Map and Prediction Map")
@@ -416,10 +502,4 @@ class Munich480_DataModule(DataModuleBase):
         
         #plt.imshow(confusionMatrix)
         plt.show()
-        
-        
-
-        
-        
-        
         

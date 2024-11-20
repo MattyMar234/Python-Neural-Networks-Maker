@@ -8,6 +8,8 @@ import torch
 from abc import abstractmethod
 import os
 
+from Networks.NetworkComponents.NeuralNetworkBase import ModelBase
+
 
 class DataModuleBase(pl.LightningDataModule):
     def __init__(self, datasetFolder:str, batch_size: int = 1, num_workers: int  = 1):
@@ -84,7 +86,7 @@ class DataModuleBase(pl.LightningDataModule):
     @abstractmethod
     def val_dataloader(self):
         ...
-
+        
     @abstractmethod
     def test_dataloader(self):
         ...
@@ -92,5 +94,9 @@ class DataModuleBase(pl.LightningDataModule):
     @abstractmethod
     def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor) -> None:
         ...
+    
+    @abstractmethod 
+    def on_work(self, model: ModelBase, device: torch.device,**kwargs) -> None:
+        raise NotImplementedError("on_work method must be implemented")
 
     
