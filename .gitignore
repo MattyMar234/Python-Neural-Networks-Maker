@@ -3,6 +3,7 @@
 *.pyc
 *.ckpt
 *.tif
+*.tif.aux.xml
 tempCodeRunnerFile.py
 Data/
 Models/
