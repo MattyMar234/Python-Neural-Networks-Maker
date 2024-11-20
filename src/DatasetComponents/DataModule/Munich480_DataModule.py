@@ -1,10 +1,12 @@
 from ast import Tuple
 from functools import lru_cache
+import pickle
 from typing import Dict, Final, List
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap
 import matplotlib.patches as mpatches
 import numpy as np
+from psycopg2 import Binary
 import pytorch_lightning as pl
 from torchvision import transforms
 import torch
@@ -13,6 +15,10 @@ import colorsys
 import seaborn as sns
 
 from sklearn.utils.class_weight import compute_class_weight
+from Database.DatabaseConnection import PostgresDB
+from Database.DatabaseConnectionParametre import DatabaseParametre
+from Database.Tables import TableBase, TensorTable
+from DatasetComponents.Datasets.DatasetBase import RemoteDataset_Connection
 from DatasetComponents.Datasets.munich480 import Munich480
 import Globals
 from Networks.Metrics.ConfusionMatrix import ConfusionMatrix
@@ -22,6 +28,7 @@ from Utility.TIF_creator import TIF_Creator
 from .DataModuleBase import *
 from torch.utils.data import DataLoader
 import os
+import time
 
 
 
@@ -308,6 +315,48 @@ class Munich480_DataModule(DataModuleBase):
     
     def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
         self.setup()
+        
+        table: TableBase = TensorTable("munich")
+        
+        databaseParametre = DatabaseParametre(
+            host="host.docker.internal",
+            port="5432",
+            database="tensors",
+            user="postgres",
+            password="admin",
+            maxconn  = 10,
+            timeout  = 10
+        )
+        
+        
+        remoteConnection: RemoteDataset_Connection = RemoteDataset_Connection(databaseParametre)
+        DB: PostgresDB = remoteConnection.getStream()
+        DB.execute_query(table.createTable_Query())
+        
+        data: Dict[str, any] = self._TEST.getItems(0)  
+        x = data['x']
+        y = data['y']  
+        
+        tensor_binary_x = Binary(pickle.dumps(x))     
+        tensor_binary_y = Binary(pickle.dumps(y))
+        q = table.getElementAt_Query(1)
+        print(q)
+
+        startTime = time.time()
+        result = DB.fetch_results(q)[0]
+        print(result)
+        print(f"Time to fetch: {time.time() - startTime}")
+        
+        retrieved_tensor_x = pickle.loads(result[1])
+        retrieved_tensor_y = pickle.loads(result[2])
+        print(f"Time to rebuild: {time.time() - startTime}")
+        
+        print(y, retrieved_tensor_y)
+        
+        #DB.execute_query(table.insertElement_Query(x = tensor_binary_x, y = tensor_binary_y, info = None))
+        
+        
+        return
         
         confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
     

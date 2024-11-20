@@ -5,25 +5,65 @@ __all__ = ["TableBase", "TrainingImages", "TestImages"]
 
 class TableBase(ABC):
     
-    def __init__(self) -> None:
+    def __init__(self, tName: str) -> None:
         super().__init__()
+        self._table_name = tName
 
-    @abstractmethod
-    def createTableQuery(self) -> str:
-        pass
-    
-    @abstractmethod
-    def generateInsertQuery(self, *args, **kwargs) -> str:
-        pass
-    
-    @abstractmethod
+    @property
     def getTableName(self) -> str:
-        pass
+        return self._table_name
 
     @abstractmethod
-    def dropTableQuery(self) -> str:
+    def createTable_Query(self) -> str:
+        pass
+    
+    @abstractmethod
+    def dropTable_Query(self) -> str:
+        pass
+    
+    @abstractmethod
+    def insertElement_Query(self, **kwargs) -> str:
+        pass
+    
+    @abstractmethod
+    def getElementAt_Query(self, idx: int, **kwargs) -> str:
+        pass
+    
+    def getTableElementsCount_Query(self) -> str:
+        return f"SELECT COUNT(*) FROM {self.getTableName};"
+
+    @abstractmethod
+    def removeElement_Query(self, idx: int) -> str:
         pass
 
+
+class TensorTable(TableBase):
+    
+    def __init__(self, tableName: str) -> None:
+        super().__init__(tableName)
+        self._id_column = "id"
+        self._x_column = "x_tensor"
+        self._y_column = "y_tensor"
+        self._info_column = "info"
+
+    def createTable_Query(self) -> str:
+        return f"CREATE TABLE IF NOT EXISTS {self.getTableName} ( " +\
+                f"{self._id_column} INT PRIMARY KEY, " +\
+                f"{self._x_column} BYTEA  NOT NULL, " +\
+                f"{self._y_column} BYTEA  NOT NULL NOT NULL, " +\
+                f"{self._info_column} BYTEA); "
+    
+    def dropTable_Query(self) -> str:
+        return f"DROP TABLE IF EXISTS {self.getTableName};"
+    
+    def getElementAt_Query(self, idx: int, **kwargs) -> str:
+        return f"SELECT * FROM {self.getTableName} WHERE {self._id_column} = {idx};"
+
+    def insertElement_Query(self, **kwargs) -> str:
+        return f"INSERT INTO {self.getTableName} ({self._x_column}, {self._y_column}, {self._info_column}) VALUES ({kwargs['x']}, {kwargs['y']}, '{kwargs['info']}');"
+
+    def removeElement_Query(self, idx: int) -> str:
+        return f"DELETE FROM {self.getTableName} WHERE {self._id_column} = {idx};"
 
 
 class ImageTable(TableBase):
@@ -40,11 +80,8 @@ class ImageTable(TableBase):
         self._gChannel_column = "green_channel"
         self._bChannel_column = "blue_channel"
 
-
-    def getTableName(self) -> str:
-        return self._table_name
     
-    def createTableQuery(self) -> str:
+    def createTable_Query(self) -> str:
         return f"CREATE TABLE IF NOT EXISTS {self._table_name} ( " +\
                 f"{self._id_column} SERIAL PRIMARY KEY, " +\
                 f"{self._label_column} INT NOT NULL, " +\

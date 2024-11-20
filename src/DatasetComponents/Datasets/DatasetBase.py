@@ -156,14 +156,14 @@ class DatasetBase(Dataset):
     
     
 
-class PostgresDB_Dataset(DatasetBase):
+class RemoteDataset_Connection(object):
     
     __lock = threading.Lock()
     __processStream: dict[int, PostgresDB] = {}
     
 
-    def __init__(self, connectionParametre: DatabaseParametre, classesCount: int, transform: transforms, oneHot: bool) -> None:
-        super().__init__(classesCount, transform, None, oneHot)
+    def __init__(self, connectionParametre: DatabaseParametre) -> None:
+        super().__init__()
         
         assert (connectionParametre is not None) 
         assert (type(connectionParametre) is DatabaseParametre)
@@ -234,7 +234,7 @@ class PostgresDB_Dataset(DatasetBase):
         
     #     PostgresDB_Dataset.__processStream.clear()
             
-    def _getStream(self) -> PostgresDB:
+    def getStream(self) -> PostgresDB:
         if not hasattr(self, '_postgresDB'):
             self.__createStream()
         
