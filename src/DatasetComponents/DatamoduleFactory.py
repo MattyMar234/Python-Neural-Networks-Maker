@@ -30,7 +30,7 @@ def makeDatamodule(datasetName: str, args: Namespace) -> DatasetBase:
         
         case AvailableDatabodule.MUNICH_2D:
             return Munich480_DataModule(
-                datasetFolder = "/dataset/munich480",
+                datasetFolder = os.path.join(Globals.DATASET_FOLDER, "munich480"),
                 batch_size=args.batch_size,
                 num_workers=args.workers,
                 useTemporalSize=False,
@@ -40,7 +40,7 @@ def makeDatamodule(datasetName: str, args: Namespace) -> DatasetBase:
             
         case AvailableDatabodule.MUNICH_3D:
             return Munich480_DataModule(
-                datasetFolder = "/dataset/munich480",
+                datasetFolder = os.path.join(Globals.DATASET_FOLDER, "munich480"),
                 batch_size=args.batch_size,
                 num_workers=args.workers,
                 useTemporalSize=True,

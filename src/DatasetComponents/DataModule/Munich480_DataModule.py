@@ -71,16 +71,7 @@ class Munich480_DataModule(DataModuleBase):
     
     _KAGGLE_DATASET_URL: Final[str] = "https://www.kaggle.com/datasets/artelabsuper/sentinel2-munich480"
     _CLASSES_FILE = "classes.txt"
-    # _MAP_COLORS: Dict[int, str] = {
-    #     0 : '#000000',  1 : '#ff7f0e',  2 : '#2ca02c',   3 : '#d62728',
-    #     4 : '#9467bd',  5 : '#8c564b',  6 : '#e377c2',   7 : '#7f7f7f',
-    #     8 : '#bcbd22',  9 : '#17becf', 10 : '#ff9896',  11 : '#98df8a',
-    #     12 : '#c5b0d5', 13 : '#ffbb78', 14 : '#c49c94',  15 : '#f7b6d2',
-    #     16 : '#9edae5', 17 : '#aec7e8', 18 : '#ffcc5c',  19 : '#ff6f69',
-    #     20 : '#96ceb4', 21 : '#ff9b85', 22 : '#c1c1c1',  23 : '#ffd700',
-    #     24 : '#b2e061', 25 : '#ff4f81', 26 : '#aa42f5' 
-    # }
-    
+
     MAP_COLORS: Dict[int, str] = _generate_distinct_colors(27)
     MAP_COLORS_AS_RGB_LIST: Dict[int, List[int]] = {key: hex_to_rgb(value) for key, value in MAP_COLORS.items()}
 
@@ -219,19 +210,26 @@ class Munich480_DataModule(DataModuleBase):
         if not self._setup_done:
             self.setup()
             
+        filePath = os.path.join(self._datasetFolder, "classes_weight.pt")
+        
+        if os.path.exists(filePath):
+            with open(filePath, "rb") as f:
+                return pickle.load(f)
+            
+            
         core: int | None = os.cpu_count()
+        batch_size = 4
         
         if core == None:
-            core = 0
-            batch_size = 4
+            core = 0 
         else:
-            batch_size:int = core * 20
+            batch_size = core * 20
         
         self._TRAIN.setLoadOnlyY(True)
         
         temp_loader = DataLoader(
             self._TRAIN,  # Assuming self._TRAIN is a Dataset object
-            batch_size=10,  # Set batch_size=1 for individual sample processing
+            batch_size=batch_size,  # Set batch_size=1 for individual sample processing
             num_workers=core,
             shuffle=False,
             persistent_workers=False,
@@ -290,6 +288,10 @@ class Munich480_DataModule(DataModuleBase):
         Globals.APP_LOGGER.info(f"Calculated classes weight: {weights_tensor}")
 
         self._TRAIN.setLoadOnlyY(False)
+        
+        with open(filePath, "wb") as f:
+            pickle.dump(weights_tensor, f)
+        
         return weights_tensor
 
 

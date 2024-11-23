@@ -4,7 +4,12 @@ from typing import Final, List
 from pathlib import Path
 
 DATA_PATH: Final[Path] = Path(os.getcwd()).parent.absolute()
-MODELS_OUTPUT_FOLDER = os.path.join(DATA_PATH, 'Models')
+MODELS_OUTPUT_FOLDER: Final[str] = os.path.join(DATA_PATH, 'Models')
+TEMP_DATA: Final[str] = os.path.join(DATA_PATH, 'temp')
+DATASET_FOLDER: Final[str] = "/dataset"
+
+if not os.path.exists(MODELS_OUTPUT_FOLDER):
+    os.makedirs(MODELS_OUTPUT_FOLDER)
 
 
 #============================= args key =============================#
