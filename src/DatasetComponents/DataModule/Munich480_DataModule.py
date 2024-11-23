@@ -408,9 +408,8 @@ class Munich480_DataModule(DataModuleBase):
             return
         
         if idx == -1:
-            creator:TIF_Creator = TIF_Creator('/app/geoData')
             
-            temp_loader = DataLoader(
+            temp_loader1 = DataLoader(
                 self._TEST,  # Assuming self._TRAIN is a Dataset object
                 batch_size=1,  # Set batch_size=1 for individual sample processing
                 num_workers=kwargs["workers"],
@@ -420,28 +419,73 @@ class Munich480_DataModule(DataModuleBase):
                 prefetch_factor=None
             )
             
-            for idx, (x, y) in enumerate(temp_loader):
-                print(f"Processing {idx}/{len(self._TEST)}\r")
-                with torch.no_grad():
-                    x = x.to(device)
-
-                    y_hat = model(x)
-
-                    y_hat_ = torch.argmax(y_hat, dim=1)
-                    y_ = torch.argmax(y, dim=0)
-
-                    profile = self._TEST.getItemInfo(idx)
-                    y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
-                    
-                    for i in range(48):
-                        for j in range(48):
-                            class_id = int(y_hat_[0, i, j])
-                            y_hat_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
-
-                    creator.makeTIF(f'{idx}.tif', profile, data =y_hat_RGB, channels = 3, width=48, height=48) 
+            temp_loader2 = DataLoader(
+                self._VAL,  # Assuming self._TRAIN is a Dataset object
+                batch_size=1,  # Set batch_size=1 for individual sample processing
+                num_workers=kwargs["workers"],
+                shuffle=False,
+                persistent_workers=False,
+                pin_memory=False,
+                prefetch_factor=None
+            )
             
+            temp_loader3 = DataLoader(
+                self._TRAIN,  # Assuming self._TRAIN is a Dataset object
+                batch_size=1,  # Set batch_size=1 for individual sample processing
+                num_workers=kwargs["workers"],
+                shuffle=False,
+                persistent_workers=False,
+                pin_memory=False,
+                prefetch_factor=None
+            )
+            
+            creator_x:TIF_Creator = TIF_Creator('/app/geoData/x')
+            creator_y:TIF_Creator = TIF_Creator('/app/geoData/y')
+            creator_y_hat:TIF_Creator = TIF_Creator('/app/geoData/y_hat')
+            loaders = [temp_loader1, temp_loader2, temp_loader3]
+            idx = 0
+            
+            # creator_y_hat.mergeTIFs('/app/merged_y_hat.tif')
+            # creator_y.mergeTIFs('/app/merged_y.tif')
+            
+            size = 0
+            
+            for loader in loaders:
+                size += len(loader)
+                
+            for k, loader in enumerate(loaders):
+                for n, (x, y) in enumerate(loader):
+                    print(f"Processing {idx}/{size} | [{k}-{n}]", end = '\r')
+                    with torch.no_grad():
+                        x = x.to(device)
+
+                        y_hat = model(x)
+
+                        y_hat_ = torch.argmax(y_hat, dim=1)
+                        y_ = torch.argmax(y, dim=1)
+
+                        profile = loader.dataset.getItemInfo(n)
+
+                        #profile = self._TEST.getItemInfo(n)
+                        y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                        y_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                        
+                        for i in range(48):
+                            for j in range(48):
+                                class_id = int(y_hat_[0, i, j])
+                                y_hat_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                                class_id = int(y_[0, i, j])
+                                y_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                    creator_y_hat.makeTIF(f'{idx}.tif', profile, data =y_hat_RGB, channels = 3, width=48, height=48) 
+                    creator_y.makeTIF(f'{idx}.tif', profile, data =y_RGB, channels = 3, width=48, height=48)
+                
+                    idx += 1
         
-            creator.mergeTIFs('/app/merged.tif')
+            print("start merging...")
+            # creator_y_hat.mergeTIFs('/app/merged_y_hat.tif')
+            # creator_y.mergeTIFs('/app/merged_y.tif')
    
     
     
