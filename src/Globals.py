@@ -33,3 +33,16 @@ APP_LOGGER: Logger | None = None
 
 APP_LOGGER_NAME: Final[str] = 'appInfo'
 CONSOLE_LOGGER_NAME: Final[str] = 'console'
+
+#============================= DATABASE =============================#
+ENABLE_DATABASE: Final[str] = "database"
+DB_PORT: Final[str] = "port"
+DB_HOST: Final[str] = "host"
+DB_USER: Final[str] = "db_user"
+DB_NAME: Final[str] = "db_name"
+DB_PASSWORD: Final[str] = "psw"
+
+DEFAULT_MAX_CONNECTIONS: Final[int] = 10
+DEFAULT_MIN_CONNECTIONS: Final[int] = 1
+DEFAULT_POOL_SIZE: Final[int] = 10
+CONNECTION_TIMEOUT: Final[int] = 10

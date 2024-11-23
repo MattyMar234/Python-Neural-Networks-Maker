@@ -146,11 +146,19 @@ def main() -> None:
     parser.add_argument(f'--{str(Globals.MILESTONES)}',     type=str,   default=[10], nargs='+')
     parser.add_argument(f'--{Globals.POWER}',               type=float, default=1)
     
-    parser.add_argument('--summary',    action='store_true')
-    parser.add_argument('--test' ,      action='store_true')
-    parser.add_argument('--train',      action='store_true')
-    parser.add_argument('--compile',    action='store_true')
-    parser.add_argument('--work',       action='store_true')
+    parser.add_argument(f'--{Globals.DB_PORT}', type=str, default=str(os.environ['DB_PORT']))
+    parser.add_argument(f'--{Globals.DB_HOST}', type=str, default=str(os.environ['DB_HOST']))
+    parser.add_argument(f'--{Globals.DB_NAME}', type=str, default=str(os.environ['DB_NAME']))
+    parser.add_argument(f'--{Globals.DB_USER}', type=str, default=str(os.environ['DB_USER']))
+    parser.add_argument(f'--{Globals.DB_PASSWORD}', type=str, default=str(os.environ['DB_PASSWORD']))
+    
+    
+    parser.add_argument(f'--{Globals.ENABLE_DATABASE}', action='store_true')
+    parser.add_argument('--summary',  action='store_true')
+    parser.add_argument('--test' ,    action='store_true')
+    parser.add_argument('--train',    action='store_true')
+    parser.add_argument('--compile',  action='store_true')
+    parser.add_argument('--work',     action='store_true')
 
 
     #python main.py --workers 7 --batch_size 2 --epochs 12 --compile 0 --ckpt_path /app/Models/UNET_2D/checkpoints/epoch=9-avg_val_loss=0.43453678.ckpt
@@ -189,6 +197,8 @@ def main() -> None:
     if error:
         sys.exit(1)
         
+    argsAsDict = vars(args)
+        
     Globals.APP_LOGGER.info(args)
     
     device: torch.device = torch.device("cuda" if args.gpu_or_cpu == 'gpu' and check_pytorch_cuda() else "cpu")
@@ -215,6 +225,9 @@ def main() -> None:
     #     useTemporalSize=False,
     #     year= Munich480.Year.Y2016
     # ) 
+    
+    
+    
     
     
     datamodule: DataModuleBase = DatamoduleFactory.makeDatamodule(datasetName=args.dataset, args=args)

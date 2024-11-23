@@ -34,7 +34,8 @@ def makeDatamodule(datasetName: str, args: Namespace) -> DatasetBase:
                 batch_size=args.batch_size,
                 num_workers=args.workers,
                 useTemporalSize=False,
-                year= Munich480.Year.Y2016
+                year= Munich480.Year.Y2016,
+                args = args
             ) 
             
         case AvailableDatabodule.MUNICH_3D:
@@ -43,20 +44,9 @@ def makeDatamodule(datasetName: str, args: Namespace) -> DatasetBase:
                 batch_size=args.batch_size,
                 num_workers=args.workers,
                 useTemporalSize=True,
-                year= Munich480.Year.Y2016
-            )
-            
-        case AvailableDatabodule.MUNICH_2D_postgres:
-            return Munich480_DataModule(
-                datasetFolder = "/dataset/munich480",
-                batch_size=args.batch_size,
-                num_workers=args.workers,
-                useTemporalSize=False,
                 year= Munich480.Year.Y2016,
-                usePostgres=True
+                args = args
             )
             
-             
-        
         case _:
             raise Exception(f"Invalid dataset name {value}")
