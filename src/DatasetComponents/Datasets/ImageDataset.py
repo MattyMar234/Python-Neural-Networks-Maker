@@ -1,3 +1,4 @@
+from argparse import Namespace
 from multiprocessing import process
 from typing import Tuple
 
@@ -7,7 +8,7 @@ from Database.DatabaseConnectionParametre import DatabaseParametre
 from Database.Tables import ImageTable, TableBase
 
 from DatasetComponents.Datasets.DatasetBase import DatasetBase
-from DatasetComponents.Datasets.DatasetBase import PostgresDB_Dataset
+
 
 import torch
 import time
@@ -23,8 +24,8 @@ from abc import ABC, abstractmethod
 
 class Segmentation_Dataset_Base(DatasetBase):
     
-    def __init__(self, imageSize: Tuple[int, int, int, int] | Tuple[int, int, int], classesCount: int, x_transform, y_transform, oneHot: bool)-> None:
-        DatasetBase.__init__(self, classesCount=classesCount, x_transform=x_transform, y_transform = y_transform, oneHot=oneHot, caching = False)
+    def __init__(self, imageSize: Tuple[int, int, int, int] | Tuple[int, int, int], classesCount: int, x_transform, y_transform, oneHot: bool, args: Namespace | None = None)-> None:
+        DatasetBase.__init__(self, classesCount=classesCount, x_transform=x_transform, y_transform = y_transform, oneHot=oneHot, caching = False, args = args)
         
         assert imageSize is not None
         self.__img_Width = imageSize[0]
@@ -179,58 +180,58 @@ class ImageDataset_CSV_form_POSTGRES(Image_Dataset_Base, DatasetBase):
     
 
 
-class ImageDataset_Postgres(Image_Dataset_Base, PostgresDB_Dataset):
+# class ImageDataset_Postgres(Image_Dataset_Base, PostgresDB_Dataset):
     
-    def __init__(self, imageSize: Tuple[int, int, int], classesCount: int, connectionParametre: DatabaseParametre, table: ImageTable , transform, oneHot: bool, stackChannel: bool):
+#     def __init__(self, imageSize: Tuple[int, int, int], classesCount: int, connectionParametre: DatabaseParametre, table: ImageTable , transform, oneHot: bool, stackChannel: bool):
         
-        assert (table is not None) 
+#         assert (table is not None) 
         
         
-        Image_Dataset_Base.__init__(
-            self, 
-            imageSize=imageSize, 
-            stackChannel = stackChannel
-        )
+#         Image_Dataset_Base.__init__(
+#             self, 
+#             imageSize=imageSize, 
+#             stackChannel = stackChannel
+#         )
         
-        PostgresDB_Dataset.__init__(
-            self, 
-            classesCount= classesCount, 
-            connectionParametre=connectionParametre, 
-            transform=transform, 
-            oneHot = oneHot
-        )
+#         PostgresDB_Dataset.__init__(
+#             self, 
+#             classesCount= classesCount, 
+#             connectionParametre=connectionParametre, 
+#             transform=transform, 
+#             oneHot = oneHot
+#         )
     
-        self.__table: ImageTable = table
+#         self.__table: ImageTable = table
         
-    def _getSize(self) -> int:
-        return self._getStream().fetch_results(self.__table.getTableElementsCount())[0][0]
+#     def _getSize(self) -> int:
+#         return self._getStream().fetch_results(self.__table.getTableElementsCount())[0][0]
     
     
-    @DatasetBase._FormatResult
-    @Image_Dataset_Base._processImageData
-    def _getItem(self, idx: int) -> any:
+#     @DatasetBase._FormatResult
+#     @Image_Dataset_Base._processImageData
+#     def _getItem(self, idx: int) -> any:
         
-        database: PostgresDB = self._getStream()
+#         database: PostgresDB = self._getStream()
         
-        try:
-            query = self.__table.getElementAt(index=idx)
-            result = database.fetch_results(query)[0]
+#         try:
+#             query = self.__table.getElementAt(index=idx)
+#             result = database.fetch_results(query)[0]
         
-        except Exception as e:
-            print(e)
-            print("idx: ", idx)
-            print("query: ", query)
-            raise e
+#         except Exception as e:
+#             print(e)
+#             print("idx: ", idx)
+#             print("query: ", query)
+#             raise e
         
-        #print(result)
+#         #print(result)
         
-        label: int = result[1]
-        r_channel: np.array = np.array(result[2], dtype=np.uint8)
-        g_channel: np.array = np.array(result[3], dtype=np.uint8)
-        b_channel: np.array = np.array(result[4], dtype=np.uint8)
+#         label: int = result[1]
+#         r_channel: np.array = np.array(result[2], dtype=np.uint8)
+#         g_channel: np.array = np.array(result[3], dtype=np.uint8)
+#         b_channel: np.array = np.array(result[4], dtype=np.uint8)
     
 
-        return r_channel, g_channel, b_channel, label
+#         return r_channel, g_channel, b_channel, label
         
-        #return torch.Tensor([1,2,3]), torch.Tensor([1])
+#         #return torch.Tensor([1,2,3]), torch.Tensor([1])
      

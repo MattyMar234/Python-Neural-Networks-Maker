@@ -3,7 +3,7 @@ import os
 import traceback
 from typing import Dict
 import psycopg2
-import logging
+
 from psycopg2 import pool
 from threading import Lock
 import time
@@ -11,17 +11,8 @@ import time
 from Database.DatabaseConnectionParametre import DatabaseParametre
 from Database.Tables import *
 
-
-
-
-
-
-
-
-
-#conda install anaconda::psycopg2
-
 import threading
+import Globals
 
 class PostgresDB:
 
@@ -39,7 +30,7 @@ class PostgresDB:
             if key not in cls.__instances:
                 instance = super(PostgresDB, cls).__new__(cls)
                 cls.__instances[key] = instance
-                print(f"New PostgresDB connection. PID: {os.getpid()}, {instance}, count: {PostgresDB.__instance_count}")
+                Globals.APP_LOGGER.info(f"New PostgresDB connection on {parametre.Host}:{parametre.Port}. PID: {os.getpid()}, {instance}, count: {PostgresDB.__instance_count}")
             return cls.__instances[key]
     
     
@@ -53,10 +44,10 @@ class PostgresDB:
         self._conenectionParametre: DatabaseParametre = parametre
         self._mainProcess: bool = mainProcess
         
-        if self._mainProcess:
-            self._logger = logging.getLogger("database")
-            self._logger.info(f"{'-'*40}New Session{'-'*40}")
-            self._logger.debug(f"parametre: {self._conenectionParametre}")
+        # if self._mainProcess:
+        #     self._logger = logging.getLogger("database")
+        #     self._logger.info(f"{'-'*40}New Session{'-'*40}")
+        #     self._logger.debug(f"parametre: {self._conenectionParametre}")
         
         
         #self.__setup()
@@ -77,8 +68,8 @@ class PostgresDB:
         
         self.__name = os.getpid()
         
-        if self._mainProcess:
-            self._logger.info(f"Creating connection pool for instance: {self.__name}")
+        # if self._mainProcess:
+        #     self._logger.info(f"Creating connection pool for instance: {self.__name}")
         
         try:
             self._conn_pool = psycopg2.pool.ThreadedConnectionPool(
@@ -93,7 +84,7 @@ class PostgresDB:
             )
             
             if self._conn_pool == None:
-                print(f"Connection pool is None for procces: {self.__name}")
+                Globals.APP_LOGGER.error(f"Connection pool is None for procces: {self.__name}")
                 raise Exception("Connection pool is None")
             
             # if self._conn_pool:
@@ -103,12 +94,9 @@ class PostgresDB:
             #         print(f"Connection pool created successfully for instance: {self.__name}")
                 
         except Exception as e:
-            
-            if self._mainProcess:
-                self._logger.error(f"Instance: {self.__name}, Error creating connection pool: {e}")
-            else:
-                print(f"Instance: {self.__name}, Error creating connection pool: {e}")
-            
+            Globals.APP_LOGGER.error(f"Instance: {self.__name}, Error creating connection pool: {e}")
+    
+            os._exit(0)
             # traceback.print_exc()
             # tb = traceback.extract_tb(e.__traceback__)
             
@@ -116,7 +104,7 @@ class PostgresDB:
             #     print(f"Errore nel file '{frame.filename}', linea {frame.lineno}, nella funzione '{frame.name}'")
             #     print(f"Linea di codice: {frame.line}")
         
-            self._conn_pool = None
+            #self._conn_pool = None
 
     def is_connected(self) -> bool:
         return self._conn_pool is not None
@@ -130,15 +118,15 @@ class PostgresDB:
             raise Exception("Connection pool is None. Call 'connect()' first.")
 
     def createTable(self, table: TableBase) -> None:
-        self.execute_query(table.createTableQuery())
+        self.execute_query(table.createTable_Query())
 
     def deleteTable(self, table: TableBase) -> None:
         self.execute_query(table.dropTableQuery())
 
-    def execute_query(self, query, params=None) -> None:
+    def execute_query(self, query:str, params=None) -> None:
 
         self.__checkPool()
-        self._logger.debug(f"execute_query params: query:{query}, params:{params}")
+        #self._logger.debug(f"execute_query params: query:{query}, params:{params}")
 
         conn = self._conn_pool.getconn()  # Ottieni una connessione dal pool
         #startTime = time.time()
@@ -150,9 +138,8 @@ class PostgresDB:
                 conn.commit()
                 
         except Exception as e:
-            if self._mainProcess:
-                self._logger.error(f"Error during query execution: {e}")
             conn.rollback()
+            Globals.APP_LOGGER.error(f"Error during query execution: {e}")
         finally:
             #dTime = time.time() - startTime
             #self._logger.debug(f"Query eseguita in {dTime} s.")
@@ -170,7 +157,7 @@ class PostgresDB:
                 results = cur.fetchall()
                 return results
         except Exception as e:
-            #self._logger.error(f"error during result fetching: {e}")
+            Globals.APP_LOGGER.error(f"error during result fetching: {e}")
             return None
         
         finally:
@@ -180,7 +167,6 @@ class PostgresDB:
         if self._conn_pool:
             self._conn_pool.closeall()
             self._conn_pool = None
-            #self._logger.info("Connection pool closed.")
+            Globals.APP_LOGGER.info("Connection pool closed.")
         else:
-            #self._logger.warning("Connection pool is already closed.")
-            pass
+            Globals.APP_LOGGER.warning("Connection pool is already closed.")

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Final
 from scipy.ndimage.filters import maximum_filter1d
 import torch
 import torch.nn as nn
@@ -8,109 +8,22 @@ from DatasetComponents.DataModule.DataModuleBase import DataModuleBase
 from Networks.NetworkComponents.TrainingModel import Semantic_ImageSegmentation_TrainingBase
 from ...NetworkComponents.NeuralNetworkBase import *
 
-class UNET_2D(Semantic_ImageSegmentation_TrainingBase):
+
+class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
+    
+    _FEATURES: Final[Tuple[int, int, int, int]] = (64,128,256,512)
     
     def __init__(self, **kwargs) -> None:
+        assert len(_UnetBase._FEATURES) == 4, "The number of features must be 4"
+        assert all(i > 0 for i in _UnetBase._FEATURES), "The features must be positive integers"
         
-        datamodule: DataModuleBase = kwargs.get("datamodule")
-        features: tuple[int, int, int, int] = (64,128,256,512)
+        super().__init__(**kwargs)
         
-        in_channel: int = datamodule.input_channels
-        out_channel: int = datamodule.output_classes
-        output_Classes: int = datamodule.output_classes
-        inputSize: list | None = datamodule.input_size
-        lr: float = kwargs.get("lr", 1e-3)
-        
-    
-        
-        inputSize = [1, in_channel, 572,572] if inputSize is None else inputSize
-        
-        super().__init__(
-            in_channel= in_channel, 
-            out_channel=out_channel,
-            output_Classes=output_Classes,
-            inputSize = inputSize,
-            **kwargs
-        )
-        
-        
-        assert len(features) == 4, "The number of features must be 4"
-        assert all(i > 0 for i in features), "The features must be positive integers"
-        
-        self._features = features
         self._EncoderBlocks = nn.ModuleList()
         self._Bottleneck = nn.ModuleList()
         self._DecoderBlocks = nn.ModuleList()
         self._OutputLayer = nn.Sequential()
-        self._Pool = nn.MaxPool2d(kernel_size=2, stride=2)
         
-        for feature in features:
-            self._EncoderBlocks.append(
-                Multiple_Conv2D_Block(
-                    num_convs=2,
-                    in_channels=in_channel, 
-                    out_channels=feature, 
-                    kernel_size=(3,3), 
-                    stride=(1,1), 
-                    padding=(1,1),
-                    bias=False
-                )
-            )
-            in_channel = feature
-            
-        self._Bottleneck.append(
-            Multiple_Conv2D_Block(
-                num_convs=2,
-                in_channels=features[-1],
-                out_channels=features[-1]*2,
-                kernel_size=3,
-                stride=1,
-                padding=1,
-                bias=False
-            )
-        )
-        
-        
-        for feature in reversed(features):
-            self._DecoderBlocks.append(
-                nn.ConvTranspose2d(
-                    in_channels=feature*2,
-                    out_channels=feature,
-                    kernel_size=2,
-                    stride=2
-                )
-            )
-            self._DecoderBlocks.append(
-                Multiple_Conv2D_Block(
-                    num_convs=2,
-                    in_channels=feature*2,
-                    out_channels=feature,
-                    kernel_size=3,
-                    stride=1,
-                    padding=1,
-                    bias=False
-                )
-            )
-            
-        self._OutputLayer.append(
-            nn.Conv2d(
-                in_channels=features[0],
-                out_channels=out_channel,
-                kernel_size=1
-            )
-        )
-        
-        
-        lossClass = self.configure_loss()
-        
-        if isinstance(lossClass, nn.BCELoss):
-            self._OutputLayer.append(nn.Sigmoid())   
-        elif isinstance(lossClass, nn.CrossEntropyLoss):
-            pass
-        else:
-            raise ValueError("The loss function is not supported")
-        
-    
     def forward(self, x) -> torch.Tensor | None :
         
         skip_connections = []
@@ -118,7 +31,7 @@ class UNET_2D(Semantic_ImageSegmentation_TrainingBase):
         for encoder_block in self._EncoderBlocks:
             x = encoder_block(x)
             skip_connections.append(x)
-            x = self._Pool(x)
+            x = self._DownSampler(x)
 
         x = self._Bottleneck[0](x)
 
@@ -142,7 +55,98 @@ class UNET_2D(Semantic_ImageSegmentation_TrainingBase):
             #Eseguo le due convoluzioni 
             x = self._DecoderBlocks[i+1](concat_skip)
 
-        return self._OutputLayer[0](x)
+        return self._OutputLayer(x)
+
+
+class UNET_2D(_UnetBase):
+    
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        
+        inputSize: list | None = self._datamodule.input_size
+        inputSize = [1, self._in_Channel, 572,572] if inputSize is None else inputSize
+        
+        try:
+            assert len(inputSize) == 4, "The input size must be a list of 4 elements"
+        except AssertionError as e:
+            print(f"Error: {e}")
+            print("Input size: ", inputSize)
+            raise
+        
+        
+        self._DownSampler = nn.MaxPool2d(kernel_size=2, stride=2)
+       
+        
+        in_feat = self._in_Channel
+        
+        for feature in _UnetBase._FEATURES:
+            self._EncoderBlocks.append(
+                Multiple_Conv2D_Block(
+                    num_convs=2,
+                    in_channels=in_feat, 
+                    out_channels=feature, 
+                    kernel_size=(3,3), 
+                    stride=(1,1), 
+                    padding=(1,1),
+                    bias=False
+                )
+            )
+            in_feat = feature
+            
+        self._Bottleneck.append(
+            Multiple_Conv2D_Block(
+                num_convs=2,
+                in_channels=_UnetBase._FEATURES[-1],
+                out_channels=_UnetBase._FEATURES[-1]*2,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                bias=True
+            )
+        )
+        
+        
+        for feature in reversed(_UnetBase._FEATURES):
+            self._DecoderBlocks.append(
+                nn.ConvTranspose2d(
+                    in_channels=feature*2,
+                    out_channels=feature,
+                    kernel_size=2,
+                    stride=2
+                )
+            )
+            self._DecoderBlocks.append(
+                Multiple_Conv2D_Block(
+                    num_convs=2,
+                    in_channels=feature*2,
+                    out_channels=feature,
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                    bias=False
+                )
+            )
+            
+        self._OutputLayer.append(
+            nn.Conv2d(
+                in_channels=_UnetBase._FEATURES[0],
+                out_channels=self._out_channel,
+                kernel_size=1
+            )
+        )
+        
+        
+        lossClass = self.configure_loss()
+        
+        if isinstance(lossClass, nn.BCELoss):
+            self._OutputLayer.append(nn.Sigmoid())   
+        elif isinstance(lossClass, nn.CrossEntropyLoss):
+            pass
+        else:
+            raise ValueError("The loss function is not supported")
+        
+    
+    
 
         
         
@@ -151,52 +155,100 @@ class UNET_2D(Semantic_ImageSegmentation_TrainingBase):
         
        
 
-class UNet_3D(Semantic_ImageSegmentation_TrainingBase):
+class UNet_3D(_UnetBase):
     def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         
-        datamodule: DataModuleBase = kwargs.get("datamodule")
-        features: tuple[int, int, int, int] = (64,128,256,512)
+        assert len(self._DataInputSize) == 5, "The input size must be a list of 5 elements"
         
-        in_channel: int = datamodule.input_channels
-        out_channel: int = datamodule.output_classes
-        output_Classes: int = datamodule.output_classes
-        inputSize: list | None = datamodule.input_size
-        lr: float = kwargs.get("lr", 1e-3)
+        self._depth = self._DataInputSize[2]
+        self._inputSize = [1, self._in_Channel, self._depth, 572,572]
         
-    
+      
         
-        inputSize = [1, in_channel, 572,572] if inputSize is None else inputSize
+        #================ DOWN_SAMPLER ================#
         
-        super().__init__(
-            in_channel= in_channel, 
-            out_channel=out_channel,
-            output_Classes=output_Classes,
-            inputSize = inputSize,
-            lr=lr
-        )
+        self._DownSampler = nn.MaxPool3d(kernel_size=(2,2,2), stride=(2,2,2))
         
-        
-        assert len(features) == 4, "The number of features must be 4"
-        assert all(i > 0 for i in features), "The features must be positive integers"
-        
-        self._features = features
-        self._EncoderBlocks = nn.ModuleList()
-        self._Bottleneck = nn.ModuleList()
-        self._DecoderBlocks = nn.ModuleList()
-        self._OutputLayer = nn.Sequential()
-        
-        self._Downsampler = nn.MaxPool3d(kernel_size=(2,2,2), stride=(2,2,2))
 
-        for feature in features:
+        #================ ENCODER ================#
+        in_feat = self._in_Channel
+        
+        for feature in _UnetBase._FEATURES:
             self._EncoderBlocks.append(
                 Multiple_Conv3D_Block(
                     num_convs=2,
-                    in_channels=in_channel, 
+                    in_channels=in_feat, 
                     out_channels=feature, 
                     kernel_size=(3,3,3), 
-                    stride=(2,2,2), 
+                    stride=(1,1,1), 
                     padding=(1,1,1),
-                    bias=False
+                    bias=True
                 )
             )
-            in_channel = feature
+            in_feat = feature
+        
+        #================ BRIDGE ================#
+        self._Bottleneck.append(
+            Multiple_Conv3D_Block(
+                num_convs=2,
+                in_channels=_UnetBase._FEATURES[-1],
+                out_channels=_UnetBase._FEATURES[-1]*2,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                bias=True
+            )
+        )
+        #================ DECODER ================#
+        for feature in reversed(_UnetBase._FEATURES):
+            self._DecoderBlocks.append(
+                Deconv3D_Block(
+                    in_channels=feature*2,
+                    out_channels=feature,
+                    kernel_size=(3,3,3),
+                    stride=(2,2,2)
+                )
+            )
+            self._DecoderBlocks.append(
+                Multiple_Conv3D_Block(
+                    num_convs=2,
+                    in_channels=feature*2,
+                    out_channels=feature,
+                    kernel_size=(3,3,3),
+                    stride=(1,1,1),
+                    padding=(1,1,1),
+                    bias=True
+                )
+            )
+            
+            
+        self._OutputLayer = nn.Sequential(
+            nn.Conv3d(
+                in_channels=_UnetBase._FEATURES[0],
+                out_channels=1,
+                kernel_size=(1,1,1),
+                stride=(1,1,1),
+                padding=0,
+                bias=True
+            ),
+            Squeezer(1),
+            nn.Conv2d(
+                in_channels=self._depth, 
+                out_channels=self._out_channel, 
+                kernel_size=(1,1), 
+                stride=(1,1), 
+                padding=0, 
+                bias=True
+            )
+        )
+        
+        
+        lossClass = self.configure_loss()
+        
+        if isinstance(lossClass, nn.BCELoss):
+            self._OutputLayer.append(nn.Sigmoid())   
+        elif isinstance(lossClass, nn.CrossEntropyLoss):
+            pass
+        else:
+            raise ValueError("The loss function is not supported")

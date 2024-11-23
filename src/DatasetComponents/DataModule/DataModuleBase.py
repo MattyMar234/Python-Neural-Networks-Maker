@@ -1,5 +1,6 @@
+from argparse import Namespace
 from ast import Tuple
-from typing import List
+from typing import List, Optional
 import numpy as np
 import opendatasets
 import pytorch_lightning as pl
@@ -8,9 +9,11 @@ import torch
 from abc import abstractmethod
 import os
 
+from Networks.NetworkComponents.NeuralNetworkBase import ModelBase
+
 
 class DataModuleBase(pl.LightningDataModule):
-    def __init__(self, datasetFolder:str, batch_size: int = 1, num_workers: int  = 1):
+    def __init__(self, datasetFolder:str, batch_size: int = 1, num_workers: int  = 1, args: Namespace | None = None):
         super().__init__()
         
         assert batch_size > 0, "Batch size must be greater than 0"
@@ -21,6 +24,9 @@ class DataModuleBase(pl.LightningDataModule):
         self._datasetFolder = datasetFolder
         self._batch_size = batch_size
         self._num_workers = num_workers
+        self._classes_weights: torch.Tensor | None = None
+        self._args: Namespace | None = args
+
         
     def _DownloadDataset(self, url:str, folder:str) -> None:
         if not os.path.exists(folder):
@@ -36,7 +42,21 @@ class DataModuleBase(pl.LightningDataModule):
     @abstractmethod
     def classesToIgnore(self) -> List[int]: 
         raise NotImplementedError("classesToIgnore method must be implemented")
-      
+    
+
+    @abstractmethod
+    def calculate_classes_weight(self) -> List[int]:
+        return torch.ones(self.output_classes) * (1 / self.output_classes)
+        #raise NotImplementedError("classes_frequenze method must be implemented")
+    
+    @property 
+    def getWeights(self) -> torch.Tensor:
+        if self._classes_weights is None:
+            self._classes_weights = self.calculate_classes_weight()
+        
+        return self._classes_weights
+    
+    
     @property 
     @abstractmethod  
     def output_classes(self) -> int:
@@ -68,7 +88,7 @@ class DataModuleBase(pl.LightningDataModule):
     @abstractmethod
     def val_dataloader(self):
         ...
-
+        
     @abstractmethod
     def test_dataloader(self):
         ...
@@ -76,5 +96,9 @@ class DataModuleBase(pl.LightningDataModule):
     @abstractmethod
     def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor) -> None:
         ...
+    
+    @abstractmethod 
+    def on_work(self, model: ModelBase, device: torch.device,**kwargs) -> None:
+        raise NotImplementedError("on_work method must be implemented")
 
     

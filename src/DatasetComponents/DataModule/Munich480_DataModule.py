@@ -1,10 +1,13 @@
+from argparse import Namespace
 from ast import Tuple
 from functools import lru_cache
+import pickle
 from typing import Dict, Final, List
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap
 import matplotlib.patches as mpatches
 import numpy as np
+from psycopg2 import Binary
 import pytorch_lightning as pl
 from torchvision import transforms
 import torch
@@ -12,11 +15,21 @@ import opendatasets
 import colorsys
 import seaborn as sns
 
+from sklearn.utils.class_weight import compute_class_weight
+from Database.DatabaseConnection import PostgresDB
+from Database.DatabaseConnectionParametre import DatabaseParametre
+from Database.Tables import TableBase, TensorTable
+from DatasetComponents.Datasets.DatasetBase import PostgresDataset_Interface
 from DatasetComponents.Datasets.munich480 import Munich480
+import Globals
+from Networks.Metrics.ConfusionMatrix import ConfusionMatrix
+from Networks.NetworkComponents.NeuralNetworkBase import *
+from Utility.TIF_creator import TIF_Creator
 
 from .DataModuleBase import *
 from torch.utils.data import DataLoader
 import os
+import time
 
 
 
@@ -35,19 +48,25 @@ def _generate_distinct_colors(num_classes: int) -> Dict[int, str]:
         rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
         hex_color = '#{:02x}{:02x}{:02x}'.format(int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
         colors[i] = hex_color
+        
+    colors[0] = '#333333'
     
     return colors
 
+def hex_to_rgb(hex_color: str):
+    hex_color = hex_color.lstrip('#')
+    return np.array([int(hex_color[i:i+2], 16) for i in (0, 2, 4)], dtype=np.uint8)
 
 
 class Munich480_DataModule(DataModuleBase):
-    
     
     TemporalSize: Final[int] = 32
     ImageChannels: Final[np.array] = np.array([4,6,3])
     ImageWidth: Final[int] = 48
     ImageHeight: Final[int] = 48
     ClassesCount: Final[int] = 27
+    
+    _SINGLETON_INSTANCE = None
     
     
     _KAGGLE_DATASET_URL: Final[str] = "https://www.kaggle.com/datasets/artelabsuper/sentinel2-munich480"
@@ -62,10 +81,9 @@ class Munich480_DataModule(DataModuleBase):
     #     24 : '#b2e061', 25 : '#ff4f81', 26 : '#aa42f5' 
     # }
     
-    _MAP_COLORS: Dict[int, str] = _generate_distinct_colors(27)
-    
-    
-    
+    MAP_COLORS: Dict[int, str] = _generate_distinct_colors(27)
+    MAP_COLORS_AS_RGB_LIST: Dict[int, List[int]] = {key: hex_to_rgb(value) for key, value in MAP_COLORS.items()}
+
     
     
     def __setstate__(self, state):
@@ -73,6 +91,12 @@ class Munich480_DataModule(DataModuleBase):
      
     def __getstate__(self) -> object:
         return {}
+    
+    #singleton
+    def __new__(cls, *args, **kwargs):
+        if cls._SINGLETON_INSTANCE is None:
+            cls._SINGLETON_INSTANCE = super().__new__(cls)
+        return cls._SINGLETON_INSTANCE
     
     
     def __init__(
@@ -82,9 +106,10 @@ class Munich480_DataModule(DataModuleBase):
         download: bool = False, 
         batch_size: int = 1, 
         num_workers: int  = 1,
-        useTemporalSize: bool = False
+        useTemporalSize: bool = False,
+        args: Namespace | None = None
     ):
-        super().__init__(datasetFolder, batch_size, num_workers)
+        super().__init__(datasetFolder, batch_size, num_workers, args)
 
         assert os.path.exists(datasetFolder), f"La cartella {datasetFolder} non esiste"
         assert type(year) == Munich480.Year, f"year deve essere di tipo Munich480.Year"
@@ -94,6 +119,7 @@ class Munich480_DataModule(DataModuleBase):
         self._TRAIN: Munich480 | None = None
         self._VAL: Munich480 | None = None
         self._TEST: Munich480 | None = None
+        self._setup_done = False
         
         self._year = year
         self._persistent_workers: bool = True
@@ -113,7 +139,7 @@ class Munich480_DataModule(DataModuleBase):
         
             
         if not useTemporalSize:
-            self._total_channel *= Munich480_DataModule.TemporalSize * (len(year))
+            self._total_channel *= Munich480_DataModule.TemporalSize
         
         
         self._training_trasforms = transforms.Compose([
@@ -140,9 +166,9 @@ class Munich480_DataModule(DataModuleBase):
     @property    
     def input_size(self) -> list[int]:
         if self._useTemporalSize:
-            return [1, Munich480_DataModule.TemporalSize, self._total_channel, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
+            return [1, self._total_channel, Munich480_DataModule.TemporalSize, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
         else: 
-            return [1,self._total_channel, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
+            return [1, self._total_channel, Munich480_DataModule.ImageHeight, Munich480_DataModule.ImageWidth]
 
     def prepare_data(self) -> None:
         if self._download:
@@ -157,9 +183,9 @@ class Munich480_DataModule(DataModuleBase):
             if '|' in row:
                 id, cl = row.split('|')
                 self._classesMapping[int(id)] = cl     
-        print(self._classesMapping)
+        #print(self._classesMapping)
         
-    #@lru_cache(maxsize=10)
+    
     def map_classes(self, classes: np.ndarray | List[int] | int) -> List[str] | str | None:
         
         if type(classes) == int:
@@ -172,6 +198,8 @@ class Munich480_DataModule(DataModuleBase):
           
         for i in classes:
             list_classes.append(f"{self._classesMapping[i]} - {i}")
+        
+        return list_classes
         
     def classesToIgnore(self) -> List[int]:
         sequenze = np.arange(0, self.ClassesCount)
@@ -186,14 +214,93 @@ class Munich480_DataModule(DataModuleBase):
         
         return ingnore
         
+        
+    def calculate_classes_weight(self) ->torch.tensor:
+        if not self._setup_done:
+            self.setup()
+            
+        core: int | None = os.cpu_count()
+        
+        if core == None:
+            core = 0
+            batch_size = 4
+        else:
+            batch_size:int = core * 20
+        
+        self._TRAIN.setLoadOnlyY(True)
+        
+        temp_loader = DataLoader(
+            self._TRAIN,  # Assuming self._TRAIN is a Dataset object
+            batch_size=10,  # Set batch_size=1 for individual sample processing
+            num_workers=core,
+            shuffle=False,
+            persistent_workers=False,
+            pin_memory=False,
+            prefetch_factor=None
+        )
+        
+        Globals.APP_LOGGER.info("Calulating classes weight...")
+        
+        y_flat: torch.Tensor = torch.empty((len(self._TRAIN) * Munich480_DataModule.ImageWidth * Munich480_DataModule.ImageHeight), dtype=torch.uint8)
+        index: int = 0
+    
+        for i, (_, y) in enumerate(temp_loader):
+            print(f"Loading: {min(i + 1, len(temp_loader))}/{len(temp_loader)}", end="\r")
+            
+            y = y.flatten()
+            elementCount = y.shape[0]
+            y_flat[index: index + elementCount] = y
+            index += elementCount
+            
+        print()
+    
+            
+        # print("my weights")
+        # class_counts: torch.Tensor = torch.zeros(self.output_classes)# + 1e-12
+        # class_counts += torch.bincount(y_flat, minlength=self.output_classes)
+
+        # # Calcola i pesi come inverso della frequenza, e imposta a zero le classi assenti
+        # weights = torch.zeros(self.output_classes)
+        # weights[class_counts > 0] = 1.0 / class_counts[class_counts > 0].float()
+        # weights = weights / weights.sum()  # Normalizza i pesi per sommare a 1
+        
+        # weightsDict: Dict[int, float] = {i: weights[i].item() for i in range(len(weights))}
+
+        # for i in range(len(weights)):
+        #     try:
+        #         print(f"{weightsDict[i]:.10f} -> {self.map_classes(i)}")
+        #     except:
+        #         print(f"{weightsDict[i]:.10f} -> ?")
+        
+        
+        y_flat = y_flat.numpy()
+        available_classes = np.unique(y_flat)
+        
+        class_weights = compute_class_weight(
+            class_weight='balanced',  # Opzione per bilanciare in base alla frequenza
+            classes=available_classes,  # Array di tutte le classi
+            y=y_flat
+        )
+        
+        # Mappa i pesi su tutte le classi, assegnando peso 0 alle classi assenti
+        weights = np.zeros(Munich480_DataModule.ClassesCount, dtype=np.float32)
+        weights[available_classes] = class_weights
+        weights_tensor = torch.tensor(weights, dtype=torch.float32)
+
+        Globals.APP_LOGGER.info(f"Calculated classes weight: {weights_tensor}")
+
+        self._TRAIN.setLoadOnlyY(False)
+        return weights_tensor
 
 
     def setup(self, stage=None) -> None:
+        if self._setup_done:
+            return
         
-        self._TRAIN = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= self._year, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
-        self._VAL   = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.VALIDATION, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
-        self._TEST  = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TEST, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
-
+        self._TRAIN = Munich480(args=self._args, folderPath = self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= self._year, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
+        self._VAL   = Munich480(args=self._args, folderPath = self._datasetFolder, mode= Munich480.DatasetMode.VALIDATION, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
+        self._TEST  = Munich480(args=self._args, folderPath = self._datasetFolder, mode= Munich480.DatasetMode.TEST, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
+        self._setup_done = True
 
 
     def train_dataloader(self) -> DataLoader:
@@ -207,12 +314,149 @@ class Munich480_DataModule(DataModuleBase):
         return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
     
     
-    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = False) -> None:
+    def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
+        self.setup()
+        
+        # table: TableBase = TensorTable("munich")
+        
+        # databaseParametre = DatabaseParametre(
+        #     host="192.168.1.202",#"host.docker.internal",
+        #     port="44500",
+        #     database="NAS1",
+        #     user="postgres",
+        #     password="admin",
+        #     maxconn  = 10,
+        #     timeout  = 10
+        # )
+        
+        
+        # remoteConnection: PostgresDataset_Interface = PostgresDataset_Interface(databaseParametre)
+        # DB: PostgresDB = remoteConnection.getStream()
+        # DB.execute_query(table.createTable_Query())
+        
+        # idx = 0
+        
+        # data: Dict[str, any] = self._TEST.getItems(idx)  
+        # x = data['x']
+        # y = data['y']  
+        # profile = data['profile']  
+        
+        
+        # tensor_binary_x = Binary(pickle.dumps(x))     
+        # tensor_binary_y = Binary(pickle.dumps(y))
+        # profile_binary = Binary(pickle.dumps(profile))
+        # #DB.execute_query(table.insertElement_Query(id = idx, x = tensor_binary_x, y = tensor_binary_y, info = profile_binary))
+        # q = table.getElementAt_Query(0)
+        # print(q)
+
+        startTime = time.time()
+        self._TEST.getItems(0)
+        print(f"Time to fetch: {time.time() - startTime}")
+        
+        startTime = time.time()
+        self._TEST.getItems(0)
+        print(f"Time to fetch: {time.time() - startTime}")
+        
+        # retrieved_tensor_x = pickle.loads(result[1])
+        # retrieved_tensor_y = pickle.loads(result[2])
+        # print(f"Time to rebuild: {time.time() - startTime}")
+        
+        #print(y, retrieved_tensor_y)
+        
+        
+        
+        return
+        
+        confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
+    
+    
+        checkpoint = torch.load(kwargs["ckpt_path"], map_location=torch.device(device))
+        model.load_state_dict(checkpoint["state_dict"])
+        model.to(device)
+        model.eval()
+        
+        idx = kwargs["idx"]
+        
+        if idx >= 0:
+            idx = idx % len(self._TEST)
+
+            with torch.no_grad():  
+                data: Dict[str, any] = self._TEST.getItems(idx)
+                
+                x = data['x']
+                y = data['y']
+                y = y.unsqueeze(0)
+                x = x.to(device)
+                
+                y_hat = model(x.unsqueeze(0))
+                
+                y_hat_ = torch.argmax(y_hat, dim=1)
+                y_ = torch.argmax(y, dim=1)
+                
+                print(y_hat_.shape, y_.shape)
+    
+                y_ = y_.cpu().detach()
+                y_hat_ = y_hat_.cpu().detach()
+                
+                
+                confMatrix.update(y_pr=y_hat_, y_tr=y_)
+                _, graphData = confMatrix.compute(showGraph=False)
+                
+                confMatrix.reset()
+            
+                self.show_processed_sample(x, y_hat_, y_, idx, graphData)
+            return
+        
+        if idx == -1:
+            creator:TIF_Creator = TIF_Creator('/app/geoData')
+            
+            temp_loader = DataLoader(
+                self._TEST,  # Assuming self._TRAIN is a Dataset object
+                batch_size=1,  # Set batch_size=1 for individual sample processing
+                num_workers=kwargs["workers"],
+                shuffle=False,
+                persistent_workers=False,
+                pin_memory=False,
+                prefetch_factor=None
+            )
+            
+            for idx, (x, y) in enumerate(temp_loader):
+                print(f"Processing {idx}/{len(self._TEST)}\r")
+                with torch.no_grad():
+                    x = x.to(device)
+
+                    y_hat = model(x)
+
+                    y_hat_ = torch.argmax(y_hat, dim=1)
+                    y_ = torch.argmax(y, dim=0)
+
+                    profile = self._TEST.getItemInfo(idx)
+                    y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                    
+                    for i in range(48):
+                        for j in range(48):
+                            class_id = int(y_hat_[0, i, j])
+                            y_hat_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                    creator.makeTIF(f'{idx}.tif', profile, data =y_hat_RGB, channels = 3, width=48, height=48) 
+            
+        
+            creator.mergeTIFs('/app/merged.tif')
+   
+    
+    
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = True) -> None:
         assert x is not None, "x is None"
         assert y_hat is not None, "y_hat is None"
         assert y is not None, "y is None"
         
         
+        if len(y_hat.shape) == 3:
+            y_hat = y_hat.squeeze(0)
+        if len(y.shape) == 3:
+            y = y.squeeze(0)
+        
+        print(y_hat.shape, y.shape)
         
         x = x.cpu().detach()
         x = x.squeeze(0) # elimino la dimensione della batch
@@ -221,8 +465,6 @@ class Munich480_DataModule(DataModuleBase):
             x = x.permute(1, 0, 2, 3)
             x = x.reshape(-1, 48, 48)
             
-       
-        
         if X_as_Int:
             x = x.int()
         else :
@@ -233,7 +475,7 @@ class Munich480_DataModule(DataModuleBase):
             x = x.clamp(0, 255)
             
         
-        y_hat = y_hat.cpu().detach().squeeze(0)
+        y_hat = y_hat.cpu().detach()
         y = y.cpu().detach()
         
         
@@ -266,11 +508,11 @@ class Munich480_DataModule(DataModuleBase):
         
         
         # Crea una colormap personalizzata
-        color_list = [color for _, color in sorted(Munich480_DataModule._MAP_COLORS.items())]
+        color_list = [color for _, color in sorted(Munich480_DataModule.MAP_COLORS.items())]
         cmap = ListedColormap(color_list)
         
-        label_map = y.argmax(dim=0).numpy()         # Etichetta per l'immagine corrente
-        pred_map = y_hat.argmax(dim=0).numpy()      # Predizione con massimo di ciascun layer di `y_hat`
+        label_map = y.numpy()         # Etichetta per l'immagine corrente
+        pred_map = y_hat.numpy()      # Predizione con massimo di ciascun layer di `y_hat`
         
         fig2, axes2 = plt.subplots(1, 2, figsize=(10, 5))
         fig2.suptitle("Feature Maps: Label Map and Prediction Map")
@@ -286,7 +528,7 @@ class Munich480_DataModule(DataModuleBase):
         axes2[1].axis('off')
         
         # Aggiungi legenda accanto alla seconda figura
-        legend_patches = [mpatches.Patch(color=Munich480_DataModule._MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in self._classesMapping.items()]
+        legend_patches = [mpatches.Patch(color=Munich480_DataModule.MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in self._classesMapping.items()]
         fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper right', title="Class Colors")
 
         fig1.subplots_adjust(right=0.8)
@@ -318,10 +560,4 @@ class Munich480_DataModule(DataModuleBase):
         
         #plt.imshow(confusionMatrix)
         plt.show()
-        
-        
-
-        
-        
-        
         

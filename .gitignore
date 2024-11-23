@@ -2,6 +2,7 @@
 *.csv
 *.pyc
 *.ckpt
+*.tif
 tempCodeRunnerFile.py
 Data/
 Models/
