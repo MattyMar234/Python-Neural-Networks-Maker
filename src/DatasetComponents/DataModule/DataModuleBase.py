@@ -1,3 +1,4 @@
+from argparse import Namespace
 from ast import Tuple
 from typing import List, Optional
 import numpy as np
@@ -12,7 +13,7 @@ from Networks.NetworkComponents.NeuralNetworkBase import ModelBase
 
 
 class DataModuleBase(pl.LightningDataModule):
-    def __init__(self, datasetFolder:str, batch_size: int = 1, num_workers: int  = 1):
+    def __init__(self, datasetFolder:str, batch_size: int = 1, num_workers: int  = 1, args: Namespace | None = None):
         super().__init__()
         
         assert batch_size > 0, "Batch size must be greater than 0"
@@ -24,7 +25,8 @@ class DataModuleBase(pl.LightningDataModule):
         self._batch_size = batch_size
         self._num_workers = num_workers
         self._classes_weights: torch.Tensor | None = None
-        
+        self._args: Namespace | None = args
+
         
     def _DownloadDataset(self, url:str, folder:str) -> None:
         if not os.path.exists(folder):

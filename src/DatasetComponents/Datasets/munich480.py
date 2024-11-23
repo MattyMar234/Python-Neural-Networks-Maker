@@ -1,3 +1,4 @@
+from argparse import Namespace
 import math
 import random
 from matplotlib import pyplot as plt
@@ -72,17 +73,20 @@ class Munich480(Segmentation_Dataset_Base):
         return {} 
     
 
-    def __new__(cls, folder, *args, **kwargs):
+    def __new__(cls, *args, **kwargs):
         #cls._init_shared_data(datasetFolder=folder)
         return super().__new__(cls)
            
   
-    def __init__(self, folderPath:str | None, mode: DatasetMode, year: Year, transforms, useTemporalSize: bool = False):
+    def __init__(self, folderPath:str | None, mode: DatasetMode, year: Year, transforms, useTemporalSize: bool = False, args: Namespace | None = None):
         
         assert type(mode) == Munich480.DatasetMode, "Invalid mode type"
         assert type(year) == Munich480.Year, "Invalid year type"
         
-            
+        self._folderPath:str | None = folderPath
+        self._years: Munich480.Year = year
+        self._useTemporalSize: bool = useTemporalSize
+        self._mode = mode
         
         Segmentation_Dataset_Base.__init__(
             self, 
@@ -90,14 +94,10 @@ class Munich480(Segmentation_Dataset_Base):
             classesCount = 27, 
             x_transform=transforms,
             y_transform = transforms,
-            oneHot = True
+            oneHot = True,
+            args = args
         )
         
-        
-        self._folderPath:str | None = folderPath
-        self._years: Munich480.Year = year
-        self._useTemporalSize: bool = useTemporalSize
-     
         
         match mode:
             case Munich480.DatasetMode.TRAINING:
@@ -152,6 +152,30 @@ class Munich480(Segmentation_Dataset_Base):
         self._yearsSequenze = years_sequenze
       
     
+    def _generateTableName(self):
+        className: str = self.__class__.__name__.lower()
+        
+        for available_year in Munich480.Year:
+            if available_year in self._years:
+                className += f"_{available_year.name.lower()}"
+    
+        if self._useTemporalSize:
+            className += "_temporal"
+    
+        match self._mode:
+            case Munich480.DatasetMode.TRAINING:
+                className += "_train"
+
+            case Munich480.DatasetMode.TEST:
+                className += "_test"
+
+            case Munich480.DatasetMode.VALIDATION:
+                className += "_eval"
+
+            case _:
+                raise Exception(f"Invalid mode {self._mode}")
+    
+        return className
     
     def get_y_value(self, idx: int) -> Optional[torch.Tensor]:
         assert idx < self.__len__() and idx >= 0, f"Index {idx} out of range"
@@ -299,7 +323,7 @@ class Munich480(Segmentation_Dataset_Base):
     def _getItem(self, idx: int) -> dict[str, any]:
         assert idx >= 0 and idx < self.__len__(), f"Index {idx} out of range"
         
-        dictData = self._load_year_sequenze(idx)
+        dictData: Dict[str, any] = self._load_year_sequenze(idx)
     
         
         x = dictData["x"]
@@ -322,11 +346,14 @@ class Munich480(Segmentation_Dataset_Base):
         
         
         y = torch.Tensor(self._one_hot_encode_no_cache(y))
-        y = y.float()
+        #y = y.float()
         y = y.permute(2,0,1)# -> (c x h x w)
    
         dictData['x'] = x
         dictData['y'] = y
+        
+        dictData['info'] = dictData['profile']
+        dictData.pop('profile', None)
         
         #print(x.shape, y.shape) ---> torch.Size([48, 48, 832]) np.size(48, 48)
         
@@ -388,6 +415,8 @@ class Munich480(Segmentation_Dataset_Base):
             
     
     def adjustData(self, items: dict[str, any]) -> dict[str, any]:
+        y = items['y']
+        items['y'] = y.long()
         return items
             
         

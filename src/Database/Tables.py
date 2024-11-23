@@ -57,10 +57,10 @@ class TensorTable(TableBase):
         return f"DROP TABLE IF EXISTS {self.getTableName};"
     
     def getElementAt_Query(self, idx: int, **kwargs) -> str:
-        return f"SELECT * FROM {self.getTableName} WHERE {self._id_column} = {idx};"
+        return f"SELECT {self._id_column}, {self._x_column}, {self._y_column}, {self._info_column} FROM {self.getTableName} WHERE {self._id_column} = {idx};"
 
     def insertElement_Query(self, **kwargs) -> str:
-        return f"INSERT INTO {self.getTableName} ({self._x_column}, {self._y_column}, {self._info_column}) VALUES ({kwargs['x']}, {kwargs['y']}, '{kwargs['info']}');"
+        return f"INSERT INTO {self.getTableName} ({self._id_column}, {self._x_column}, {self._y_column}, {self._info_column}) VALUES ({kwargs['id']}, {kwargs['x']}, {kwargs['y']}, {kwargs['info']});"
 
     def removeElement_Query(self, idx: int) -> str:
         return f"DELETE FROM {self.getTableName} WHERE {self._id_column} = {idx};"

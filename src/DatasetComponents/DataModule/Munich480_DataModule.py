@@ -1,3 +1,4 @@
+from argparse import Namespace
 from ast import Tuple
 from functools import lru_cache
 import pickle
@@ -18,7 +19,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from Database.DatabaseConnection import PostgresDB
 from Database.DatabaseConnectionParametre import DatabaseParametre
 from Database.Tables import TableBase, TensorTable
-from DatasetComponents.Datasets.DatasetBase import RemoteDataset_Connection
+from DatasetComponents.Datasets.DatasetBase import PostgresDataset_Interface
 from DatasetComponents.Datasets.munich480 import Munich480
 import Globals
 from Networks.Metrics.ConfusionMatrix import ConfusionMatrix
@@ -85,7 +86,6 @@ class Munich480_DataModule(DataModuleBase):
 
     
     
-    
     def __setstate__(self, state):
         return
      
@@ -106,9 +106,10 @@ class Munich480_DataModule(DataModuleBase):
         download: bool = False, 
         batch_size: int = 1, 
         num_workers: int  = 1,
-        useTemporalSize: bool = False
+        useTemporalSize: bool = False,
+        args: Namespace | None = None
     ):
-        super().__init__(datasetFolder, batch_size, num_workers)
+        super().__init__(datasetFolder, batch_size, num_workers, args)
 
         assert os.path.exists(datasetFolder), f"La cartella {datasetFolder} non esiste"
         assert type(year) == Munich480.Year, f"year deve essere di tipo Munich480.Year"
@@ -296,9 +297,9 @@ class Munich480_DataModule(DataModuleBase):
         if self._setup_done:
             return
         
-        self._TRAIN = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= self._year, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
-        self._VAL   = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.VALIDATION, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
-        self._TEST  = Munich480(self._datasetFolder, mode= Munich480.DatasetMode.TEST, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
+        self._TRAIN = Munich480(args=self._args, folderPath = self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= self._year, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
+        self._VAL   = Munich480(args=self._args, folderPath = self._datasetFolder, mode= Munich480.DatasetMode.VALIDATION, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
+        self._TEST  = Munich480(args=self._args, folderPath = self._datasetFolder, mode= Munich480.DatasetMode.TEST, year= self._year, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
         self._setup_done = True
 
 
@@ -316,44 +317,52 @@ class Munich480_DataModule(DataModuleBase):
     def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
         self.setup()
         
-        table: TableBase = TensorTable("munich")
+        # table: TableBase = TensorTable("munich")
         
-        databaseParametre = DatabaseParametre(
-            host="host.docker.internal",
-            port="5432",
-            database="tensors",
-            user="postgres",
-            password="admin",
-            maxconn  = 10,
-            timeout  = 10
-        )
+        # databaseParametre = DatabaseParametre(
+        #     host="192.168.1.202",#"host.docker.internal",
+        #     port="44500",
+        #     database="NAS1",
+        #     user="postgres",
+        #     password="admin",
+        #     maxconn  = 10,
+        #     timeout  = 10
+        # )
         
         
-        remoteConnection: RemoteDataset_Connection = RemoteDataset_Connection(databaseParametre)
-        DB: PostgresDB = remoteConnection.getStream()
-        DB.execute_query(table.createTable_Query())
+        # remoteConnection: PostgresDataset_Interface = PostgresDataset_Interface(databaseParametre)
+        # DB: PostgresDB = remoteConnection.getStream()
+        # DB.execute_query(table.createTable_Query())
         
-        data: Dict[str, any] = self._TEST.getItems(0)  
-        x = data['x']
-        y = data['y']  
+        # idx = 0
         
-        tensor_binary_x = Binary(pickle.dumps(x))     
-        tensor_binary_y = Binary(pickle.dumps(y))
-        q = table.getElementAt_Query(1)
-        print(q)
+        # data: Dict[str, any] = self._TEST.getItems(idx)  
+        # x = data['x']
+        # y = data['y']  
+        # profile = data['profile']  
+        
+        
+        # tensor_binary_x = Binary(pickle.dumps(x))     
+        # tensor_binary_y = Binary(pickle.dumps(y))
+        # profile_binary = Binary(pickle.dumps(profile))
+        # #DB.execute_query(table.insertElement_Query(id = idx, x = tensor_binary_x, y = tensor_binary_y, info = profile_binary))
+        # q = table.getElementAt_Query(0)
+        # print(q)
 
         startTime = time.time()
-        result = DB.fetch_results(q)[0]
-        print(result)
+        self._TEST.getItems(0)
         print(f"Time to fetch: {time.time() - startTime}")
         
-        retrieved_tensor_x = pickle.loads(result[1])
-        retrieved_tensor_y = pickle.loads(result[2])
-        print(f"Time to rebuild: {time.time() - startTime}")
+        startTime = time.time()
+        self._TEST.getItems(0)
+        print(f"Time to fetch: {time.time() - startTime}")
         
-        print(y, retrieved_tensor_y)
+        # retrieved_tensor_x = pickle.loads(result[1])
+        # retrieved_tensor_y = pickle.loads(result[2])
+        # print(f"Time to rebuild: {time.time() - startTime}")
         
-        #DB.execute_query(table.insertElement_Query(x = tensor_binary_x, y = tensor_binary_y, info = None))
+        #print(y, retrieved_tensor_y)
+        
         
         
         return

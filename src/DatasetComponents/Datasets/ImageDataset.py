@@ -1,3 +1,4 @@
+from argparse import Namespace
 from multiprocessing import process
 from typing import Tuple
 
@@ -23,8 +24,8 @@ from abc import ABC, abstractmethod
 
 class Segmentation_Dataset_Base(DatasetBase):
     
-    def __init__(self, imageSize: Tuple[int, int, int, int] | Tuple[int, int, int], classesCount: int, x_transform, y_transform, oneHot: bool)-> None:
-        DatasetBase.__init__(self, classesCount=classesCount, x_transform=x_transform, y_transform = y_transform, oneHot=oneHot, caching = False)
+    def __init__(self, imageSize: Tuple[int, int, int, int] | Tuple[int, int, int], classesCount: int, x_transform, y_transform, oneHot: bool, args: Namespace | None = None)-> None:
+        DatasetBase.__init__(self, classesCount=classesCount, x_transform=x_transform, y_transform = y_transform, oneHot=oneHot, caching = False, args = args)
         
         assert imageSize is not None
         self.__img_Width = imageSize[0]
