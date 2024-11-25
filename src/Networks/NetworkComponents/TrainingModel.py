@@ -1,4 +1,3 @@
-from Globals import *
 import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
@@ -37,6 +36,23 @@ class ShedulerType(Enum):
     def values(cls):
         """Returns a list of all the enum values."""
         return list(cls._value2member_map_.keys())
+    
+    
+class OptimizerType(Enum):
+
+    ADAM = "adam"
+    ADAMW = "adamW"
+    SGD = "sgd"
+    ADAGRAD = "adagrad"
+    ADAMAX = "adamax"
+    RMS_PROP = "rmsprop"
+    RPROP = "rprop"
+    NONE = "none"
+
+    @classmethod
+    def values(cls):
+        """Returns a list of all the enum values."""
+        return list(cls._value2member_map_.keys())
 
 
 
@@ -54,27 +70,18 @@ class TraingBase(LightModelBase):
         self._kwargs = kwargs
         self._learning_rate: float = kwargs['lr']
         
-        # if self._learning_rate is None or (self._learning_rate > 1 or self._learning_rate < 0):
-        #     self._learning_rate = 1e-3
         
-        self.save_hyperparameters()
-        self._lossClass = None
-        #self.save_hyperparameters(ignore=['net'])
-        
-        
-        self._lossFunction = self.configure_loss()
+        self._lossFunction = self.configure_lossFunction()
         self.train_loss_metric = torchmetrics.MeanMetric()
         self.val_loss_metric = torchmetrics.MeanMetric()
         self.val_accuracy_metric = torchmetrics.Accuracy(task="multiclass", num_classes=self._output_Classes)
-        #self.confusion_matrix_metric = torchmetrics.ConfusionMatrix(task="multiclass", num_classes=self._output_Classes)
-        
-        
         self.confusion_matrix_metric = ConfusionMatrix(classes_number=self._output_Classes, ignore_class= datamodule.classesToIgnore(), mapFuntion=datamodule.map_classes)
     
         self._last_avg_trainLoss: float = -1.0
         self._last_avg_valLoss: float = -1.0
         self._printStart_lr: bool = False
         
+        #self.save_hyperparameters()
     
     
     def _make_sheduler(self, optimizer) -> Dict[str, any]:
@@ -86,31 +93,31 @@ class TraingBase(LightModelBase):
         
         match shedulerType:
             case ShedulerType.NONE:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self._kwargs[START_FACTOR], end_factor=self._kwargs[END_FACTOR], total_iters=self._kwargs[EPOCHS])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self._kwargs[Globals.START_FACTOR], end_factor=self._kwargs[Globals.END_FACTOR], total_iters=self._kwargs[Globals.EPOCHS])
                 
             case ShedulerType.LINEAR:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self._kwargs[START_FACTOR], end_factor=self._kwargs[END_FACTOR], total_iters=self._kwargs[EPOCHS])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self._kwargs[Globals.START_FACTOR], end_factor=self._kwargs[Globals.END_FACTOR], total_iters=self._kwargs[Globals.EPOCHS])
             
             case ShedulerType.EXP:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=self._kwargs[SCHEDULER_GAMMA])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=self._kwargs[Globals.SCHEDULER_GAMMA])
             
             case ShedulerType.STEP:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self._kwargs[SCHEDULER_STEP_SIZE], gamma=self._kwargs[SCHEDULER_GAMMA])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self._kwargs[Globals.SCHEDULER_STEP_SIZE], gamma=self._kwargs[Globals.SCHEDULER_GAMMA])
             
             case ShedulerType.COSINE:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self._kwargs[SCHEDULER_STEP_SIZE], eta_min=self._kwargs[ETA_MIN])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self._kwargs[Globals.SCHEDULER_STEP_SIZE], eta_min=self._kwargs[Globals.ETA_MIN])
             
             case ShedulerType.COSINE_RESTARTS:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=self._kwargs[SCHEDULER_STEP_SIZE], T_mult=self._kwargs[T_MULT], eta_min=self._kwargs[ETA_MIN])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=self._kwargs[Globals.SCHEDULER_STEP_SIZE], T_mult=self._kwargs[Globals.T_MULT], eta_min=self._kwargs[Globals.ETA_MIN])
             
             case ShedulerType.CONSTANT:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=self._kwargs[FACTOR], total_iters=self._kwargs[SCHEDULER_STEP_SIZE])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=self._kwargs[Globals.FACTOR], total_iters=self._kwargs[Globals.SCHEDULER_STEP_SIZE])
             
             case ShedulerType.POLY:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=self._kwargs[SCHEDULER_STEP_SIZE], power=self._kwargs[POWER])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=self._kwargs[Globals.SCHEDULER_STEP_SIZE], power=self._kwargs[Globals.POWER])
             
             case ShedulerType.MULTI_STEP:
-                scheduler['scheduler'] = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=self._kwargs[MILESTONES], gamma=self._kwargs[SCHEDULER_GAMMA])
+                scheduler['scheduler'] = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=self._kwargs[Globals.MILESTONES], gamma=self._kwargs[Globals.SCHEDULER_GAMMA])
             
             # case ShedulerType.MULTI_STEP_DECAY:
             #     scheduler['scheduler'] = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self._kwargs[MILESTONES], gamma=self._kwargs[SCHEDULER_GAMMA])
@@ -133,6 +140,9 @@ class TraingBase(LightModelBase):
         
         return scheduler
     
+    def make_optimizer(self)  -> Dict[str, any]:
+        raise NotImplementedError("")
+        
     
     @abstractmethod
     def configure_optimizers(self) -> tuple[list, list]:
@@ -196,13 +206,26 @@ class TraingBase(LightModelBase):
     
     
     @abstractmethod
-    def configure_loss(self) -> nn.Module:
+    def configure_lossFunction(self) -> nn.Module:
         return nn.CrossEntropyLoss()
 
         
     @abstractmethod
     def compute_accuracy_metric(self, values: dict[str, any], batch_x: torch.Tensor, batch_y: torch.Tensor) -> None :
         self.val_accuracy_metric(values['y_hat'], batch_y)
+    
+    
+    # def on_fit_start(self): 
+    #     for logger in self.loggers:
+    #         if isinstance(logger, TensorBoardLogger):
+                
+    #             example = torch.ones(self._datamodule.input_size)
+                
+    #             if self._device == torch.device("cuda"):
+    #                 example = example.cuda()
+
+    #             example = example.cuda()
+    #             logger.experiment.add_graph(self, example)
         
         
     #================================== STEPS ==================================#

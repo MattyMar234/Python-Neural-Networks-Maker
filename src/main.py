@@ -58,52 +58,25 @@ def check_pytorch_cuda() -> bool:
 
 
 def trainModel(args: argparse.Namespace | None, device: str, datamodule: DataModuleBase, model: ModelBase) -> None:
-    global MODELS_OUTPUT_FOLDER
+    
     
     networkManager = NetworkManager(
         device=device,
         model=model,
         args = args,
-        workingFolder= MODELS_OUTPUT_FOLDER,
+        workingFolder= Globals.MODELS_TRAINING_FOLDER,
     )
     
     networkManager.lightTrainNetwork(datamodule = datamodule)
+
 
 def testModel(args: argparse.Namespace | None, device: str, datamodule: DataModuleBase, model: ModelBase) -> None:
     pass
 
 
-    # databaseParametre = DatabaseParametre(
-    #     host="host.docker.internal",
-    #     port="5432",
-    #     database="IMAGES",
-    #     user="postgres",
-    #     password="admin",
-    #     maxconn  = 10,
-    #     timeout  = 10
-    # )
-    
-    
-    
-    # TRAINING_DATASET: ImageDataset_Postgres = ImageDataset_Postgres(
-    #     imageSize=(32,32,3),
-    #     classesCount=10,
-    #     connectionParametre=databaseParametre,
-    #     table=TrainingImages(),
-    #     transform=training_trasforms1,
-    #     oneHot=True,
-    #     stackChannel=True
-    # )
-    
-    # TEST_DATASET: ImageDataset_Postgres = ImageDataset_Postgres(
-    #     imageSize=(32,32,3),
-    #     classesCount=10,
-    #     connectionParametre=databaseParametre,
-    #     table=TestImages(),
-    #     transform=test_trasforms1,
-    #     oneHot=True,
-    #     stackChannel=True
-    # )
+
+def exportModel(args: argparse.Namespace | None, model: ModelBase) -> None:
+    pass
     
 
 
@@ -120,7 +93,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('--ckpt_path',         type=Path,   default=None,            help='checkpoint or pretrained path')
-    parser.add_argument('--ouputs',            type=Path,   default=MODELS_OUTPUT_FOLDER,  help='logs and data output path')
+    parser.add_argument('--ouputs',            type=Path,   default=Globals.MODELS_TRAINING_FOLDER,  help='logs and data output path')
     parser.add_argument('--data_dir',          type=Path,   default=Path.cwd().parent)
     parser.add_argument('--dataset',           type=str,    default='?',             choices=DatamoduleFactory.AvailableDatabodule.values())
     parser.add_argument('--test_id',           type=str,    default='A',             choices=['A', 'Y'])
@@ -131,6 +104,7 @@ def main() -> None:
     parser.add_argument('--gpu_or_cpu',        type=str,    default='gpu',           choices=['gpu', 'cpu'])
     parser.add_argument('--gpus',              type=int,    default=[0],             nargs='+')
     parser.add_argument('--idx',               type=int,    default=0)
+    parser.add_argument(f'--{Globals.LOGGER_VERSION}', type=int,   default=Globals.AUTOMATIC_VERSIONANING_VALUE)
     
     parser.add_argument(f'--{Globals.LEARNING_RATE}',       type=float, default=1e-4,            help='learning rate')
     parser.add_argument(f'--{Globals.SCHEDULER_TYPE}',      type=str,   default=ShedulerType.NONE, choices=ShedulerType.values())
@@ -154,6 +128,7 @@ def main() -> None:
     
     
     parser.add_argument(f'--{Globals.ENABLE_DATABASE}', action='store_true')
+    parser.add_argument(f'--{Globals.EXPORT_MODEL}',    action='store_true')
     parser.add_argument('--summary',  action='store_true')
     parser.add_argument('--test' ,    action='store_true')
     parser.add_argument('--train',    action='store_true')

@@ -1,7 +1,10 @@
+
 from argparse import Namespace
 from multiprocessing import process
+import os
 import pickle
 import threading
+import time
 from typing import Any, Dict, Optional, Tuple
 from psycopg2 import Binary
 import torch
@@ -16,6 +19,7 @@ from Database.DatabaseConnection import PostgresDB
 from Database.DatabaseConnectionParametre import DatabaseParametre
 from Database.Tables import TableBase, TensorTable
 import Globals
+from utility import measure_execution_time
 
 
 # class Segmentation_DatasetBase(Dataset):
@@ -42,7 +46,7 @@ class DatasetBase(Dataset):
      
     def __getstate__(self) -> dict[str, Any]:
         if hasattr(self, '_postgresDB') and self._postgresDB is not None:
-            self._postgresDB.close_pool()
+            #self._postgresDB.close_pool()
             self._postgresDB = None
         
         state = self.__dict__.copy()
@@ -69,12 +73,15 @@ class DatasetBase(Dataset):
         
         self._argsDict: Optional[Dict[str, any]] = vars(args) if args is not None else None
         #self._databaseParametre:  Optional[DatabaseParametre] = None
-        self._postgresDataset: Optional[PostgresDB] = None
+        self._postgresDatasets: Dict[int, PostgresDB] = {}
         self._useDB: bool = False
         self._table: Optional[TensorTable] = None
         
+        
         if self._argsDict is not None and self._argsDict[Globals.ENABLE_DATABASE]:
             self._useDB = True
+        
+        
         
         
         self._createStream()
@@ -89,7 +96,7 @@ class DatasetBase(Dataset):
         if self._load_only_Y:
             return torch.zeros(1), self.get_y_value(idx)
         
-        itemDict = self._getItem(idx)
+        itemDict = self.getItem(idx)
         
         if not self._skip_transforms:
             itemDict = self.on_apply_transforms(itemDict)
@@ -97,6 +104,21 @@ class DatasetBase(Dataset):
         itemDict = self.adjustData(itemDict)
         return  itemDict['x'], itemDict['y']    
 
+
+    #@lru_cache(maxsize=os.cpu_count() + 4)
+    def getStream(self, PID) -> PostgresDB:
+        
+        PID = 0
+        stram = self._postgresDatasets.get(PID, None)
+        
+        if stram is None:
+            print(f"New connection for: {PID}")
+
+            self._postgresDatasets[PID] = self._createStream()
+            return self._postgresDatasets[PID]
+        
+        return stram
+        return self._createStream()
 
     def setLoadOnlyY(self, load_only_Y: bool):
         self._load_only_Y = load_only_Y
@@ -109,9 +131,9 @@ class DatasetBase(Dataset):
     def _generateTableName(self):
         return self.__class__.__name__.lower()
 
-    def _createStream(self) -> None:
+    def _createStream(self) -> PostgresDB:
         
-        if not self._useDB or self._postgresDataset is not None:
+        if not self._useDB:
             return 
             
         databaseParametre = DatabaseParametre(
@@ -127,43 +149,44 @@ class DatasetBase(Dataset):
         #print(databaseParametre)
         
         self._table = TensorTable(self._generateTableName())
-        self._postgresDataset = PostgresDB(databaseParametre)
-        self._postgresDataset.execute_query(self._table.createTable_Query())
-
+        database = PostgresDB(databaseParametre)
+        database.execute_query(self._table.createTable_Query())
+        return database
     
-    def getItems(self, idx: int) -> Dict[str,any]:
+    #@measure_execution_time
+    def getItem(self, idx: int) -> Dict[str,any]:
         if not self._useDB:
             return self._getItem(idx)
         
+        database = self.getStream(os.getpid())
         query: str = self._table.getElementAt_Query(idx)
-        result = self._postgresDataset.fetch_results(query)
+        result = database.fetch_results(query)
+    
         
-        if len(result) == 1:
-            row = result[0]
+        if result is not None:
+            if len(result) == 1:
+                row = result[0]
+                
+                return {
+                    'x' : pickle.loads(row[1]),
+                    'y' : pickle.loads(row[2]),
+                    'info' : pickle.loads(row[3])
+                }
             
-            return {
-                'x' : pickle.loads(row[1]),
-                'y' : pickle.loads(row[2]),
-                'info' : pickle.loads(row[3])
-            }
-        
-        if len(result) > 1:
-            raise Exception("Too many results")
+            if len(result) > 1:
+                raise Exception("Too many results")
     
         
         data: Dict[str, any] = self._getItem(idx)
-        tensor_binary_x = Binary(pickle.dumps(data['x']))     
-        tensor_binary_y = Binary(pickle.dumps(data['y']))
-        info_binary = Binary(pickle.dumps(data['info']))
         
         query = self._table.insertElement_Query(
             id = idx, 
-            x = tensor_binary_x, 
-            y = tensor_binary_y, 
-            info = info_binary
+            x = Binary(pickle.dumps(data['x']))     , 
+            y = Binary(pickle.dumps(data['y'])), 
+            info = Binary(pickle.dumps(data['info']))
         )
         
-        self._postgresDataset.execute_query(query)
+        database.execute_query(query)
         return data
     
     
@@ -286,7 +309,7 @@ class PostgresDataset_Interface(object):
      
     def __getstate__(self) -> object:
         if hasattr(self, '_postgresDataset') and self._postgresDataset is not None:
-            self._postgresDataset.close_pool()
+            #self._postgresDataset.close_pool()
             self._postgresDataset = None
         
         state = self.__dict__.copy()
@@ -335,11 +358,11 @@ class PostgresDataset_Interface(object):
         
     #     PostgresDB_Dataset.__processStream.clear()
             
-    def getStream(self) -> PostgresDB:
-        if self._postgresDB is None:
-            self.__createStream()
+    # def getStream(self) -> PostgresDB:
+    #     if self._postgresDB is None:
+    #         self.__createStream()
         
-        return self._postgresDB
+    #     return self._postgresDB
     
     # @__synchronized(__lock)
     # def _getStream(self) -> PostgresDB:

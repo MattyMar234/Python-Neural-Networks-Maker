@@ -1,20 +1,28 @@
 from logging import Logger
 import os
-from typing import Final, List
+from typing import Any, Final, List
 from pathlib import Path
 
 DATA_PATH: Final[Path] = Path(os.getcwd()).parent.absolute()
-MODELS_OUTPUT_FOLDER: Final[str] = os.path.join(DATA_PATH, 'Models')
+MODELS_TRAINING_FOLDER: Final[str] = os.path.join(DATA_PATH, 'Models')
+MODELS_OUTPUT_FOLDER: Final[str] = os.path.join(DATA_PATH, 'Models_Output')
 TEMP_DATA: Final[str] = os.path.join(DATA_PATH, 'temp')
 DATASET_FOLDER: Final[str] = "/dataset"
+
+if not os.path.exists(MODELS_TRAINING_FOLDER):
+    os.makedirs(MODELS_TRAINING_FOLDER)
 
 if not os.path.exists(MODELS_OUTPUT_FOLDER):
     os.makedirs(MODELS_OUTPUT_FOLDER)
 
+#============================ LOGGER ============================#
+LOGGER_VERSION: Final[str] = "loggerVersion"
+AUTOMATIC_VERSIONANING_VALUE: Final[Any] = None
 
 #============================= args key =============================#
 EPOCHS: Final[str] = 'epochs'
 PREFETCH_FACTOR: Final[str] = 'prefetch_factor'
+EXPORT_MODEL: Final[str] = 'export'
 
 LEARNING_RATE: Final[str] = 'lr'
 SCHEDULER_TYPE: Final[str] = 'sch'

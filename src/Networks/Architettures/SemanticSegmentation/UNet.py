@@ -33,7 +33,7 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
         self._OutputLayer = nn.Sequential()
         
         
-    def configure_loss(self) -> nn.Module:
+    def configure_lossFunction(self) -> nn.Module:
         
         if self._output_Classes == 1:
             return nn.BCELoss()
@@ -172,7 +172,7 @@ class UNET_2D(_UnetBase):
         )
         
         
-        lossClass = self.configure_loss()
+        lossClass = self.configure_lossFunction()
         
         if isinstance(lossClass, nn.BCELoss):
             self._OutputLayer.append(nn.Sigmoid())   
@@ -280,7 +280,7 @@ class UNet_3D(_UnetBase):
         )
         
         
-        lossClass = self.configure_loss()
+        lossClass = self.configure_lossFunction()
         
         if isinstance(lossClass, nn.BCELoss):
             self._OutputLayer.append(nn.Sigmoid())   

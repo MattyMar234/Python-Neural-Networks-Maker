@@ -27,6 +27,21 @@ class DataModuleBase(pl.LightningDataModule):
         self._classes_weights: torch.Tensor | None = None
         self._args: Namespace | None = args
 
+    @property
+    @abstractmethod
+    def getTrainingDataset(self) -> torch.utils.data.Dataset:
+        raise NotImplementedError("getTrainingDataset method must be implemented")
+
+    @property
+    @abstractmethod
+    def getTestDataset(self) -> torch.utils.data.Dataset:
+        raise NotImplementedError("getTestDataset method must be implemented")
+    
+    @property
+    @abstractmethod
+    def getValidationDataset(self) -> torch.utils.data.Dataset:
+        raise NotImplementedError("getValidationDataset method must be implemented")
+        
         
     def _DownloadDataset(self, url:str, folder:str) -> None:
         if not os.path.exists(folder):
@@ -79,6 +94,9 @@ class DataModuleBase(pl.LightningDataModule):
     @property  
     @abstractmethod  
     def input_size(self) -> list[int] | None:
+        '''
+        Resituitsce un array che rappresenta la dimensione dell'input
+        '''
         return None
     
 

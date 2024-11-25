@@ -85,16 +85,26 @@ class NetworkManager:
 
 
     def lightTrainNetwork(self, datamodule: DataModuleBase, **kwargs):
-        
-
-        
         pl.seed_everything(NetworkManager.__trainingRandomSeed, workers= True)#self._args.workers > 0)
         
         
         
-        tensorBoard_logger = TensorBoardLogger(save_dir= self._workingFolder, name="TensorBoard_logs")
-        CSV_logger = CSVLogger(save_dir= self._workingFolder, name="CSV_logs")
+        tensorBoard_logger = TensorBoardLogger(
+            save_dir= self._workingFolder, 
+            name="TensorBoard_logs",
+            version= vars(self._args).get(Globals.LOGGER_VERSION, None)
+        )
         
+        CSV_logger = CSVLogger(
+            save_dir= self._workingFolder, 
+            name="CSV_logs",
+            version= vars(self._args).get(Globals.LOGGER_VERSION, None)    
+        )
+        
+        tensorBoard_logger.log_hyperparams = lambda *args, **kwargs: None
+        CSV_logger.log_hyperparams = lambda *args, **kwargs: None
+        
+    
         
         checkpoint_callback = ModelCheckpoint(
             monitor=TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME,  # La metrica da monitorare
@@ -336,3 +346,4 @@ class NetworkManager:
         predicted_probability = all_probabilities[0, predicted_class_index].item()
         
         return predicted_class_index, predicted_probability, all_probabilities
+    
