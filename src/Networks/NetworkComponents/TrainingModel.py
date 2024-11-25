@@ -58,6 +58,7 @@ class TraingBase(LightModelBase):
         #     self._learning_rate = 1e-3
         
         self.save_hyperparameters()
+        self._lossClass = None
         #self.save_hyperparameters(ignore=['net'])
         
         
@@ -132,10 +133,45 @@ class TraingBase(LightModelBase):
         
         return scheduler
     
+    
+    @abstractmethod
+    def configure_optimizers(self) -> tuple[list, list]:
+        optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)
+        scheduler = self._make_sheduler(optimizer)
+    
+        Globals.APP_LOGGER.info(f"lr: {optimizer.param_groups[0]['lr']}")
+        
+        # return {
+        #     'optimizer': optimizer,
+        #     'lr_scheduler': scheduler
+        # }
+        
+        return [optimizer], [scheduler]
+    
+    
+    def stampa_chiavi(self, dizionario, prefisso=""):
+        """
+        Stampa tutte le chiavi di un dizionario, inclusi eventuali dizionari nidificati.
+        
+        Args:
+            dizionario (dict): Il dizionario da analizzare.
+            prefisso (str): Un prefisso per tracciare i livelli di nidificazione (opzionale).
+        """
+        for chiave, valore in dizionario.items():
+            chiave_completa = f"{prefisso}[{chiave}]" if prefisso else chiave
+            print(chiave_completa)
+            if isinstance(valore, dict):  # Controlla se il valore è un altro dizionario
+                self.stampa_chiavi(valore, prefisso=chiave_completa)
+    
     def on_load_checkpoint(self, checkpoint: dict) -> None:
         # Modifica il checkpoint prima che venga caricato
         
         data = self.configure_optimizers()
+        self.stampa_chiavi(checkpoint)
+        
+        if checkpoint['state_dict'].get('_lossClass.weight') is not None:
+            checkpoint['state_dict'].pop('_lossClass.weight')
+        #self.stampa_chiavi(checkpoint)
         
       
         # Cambia il valore del learning rate nell'optimizer
@@ -147,30 +183,22 @@ class TraingBase(LightModelBase):
         
         if 'lr_schedulers' in checkpoint:
             checkpoint['lr_schedulers'] = data[1]
-
-
+            
         return checkpoint
     
-    # @abstractmethod 
-    # def configure_optimizers(self) -> tuple[list, list]:
-    #     optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
-    #     return [optimizer], [self._make_sheduler()]
     
     @abstractmethod  
-    def _commonStep(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
+    def calculateLoss(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
         #y_hat = self.__net(x)
         y_hat = self.forward(x)
         loss = self._lossFunction(y_hat, y.squeeze(1))
         return {"loss": loss, "y_hat": y_hat}
     
+    
     @abstractmethod
     def configure_loss(self) -> nn.Module:
         return nn.CrossEntropyLoss()
 
-
-    @abstractmethod
-    def configure_optimizers(self) -> tuple[list, list]:
-        ...
         
     @abstractmethod
     def compute_accuracy_metric(self, values: dict[str, any], batch_x: torch.Tensor, batch_y: torch.Tensor) -> None :
@@ -189,7 +217,7 @@ class TraingBase(LightModelBase):
             self._printStart_lr = False
         
         batch_imgs, batch_labels = batch
-        values = self._commonStep(x=batch[0], y=batch[1], batch_idx=batch_idx)
+        values = self.calculateLoss(x=batch_imgs, y=batch_labels, batch_idx=batch_idx)
         
         #Accumolo il valore della loss
         self.train_loss_metric.update(values['loss'])
@@ -200,7 +228,7 @@ class TraingBase(LightModelBase):
     
     def validation_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int):
         batch_imgs, batch_labels = batch
-        values = self._commonStep(x=batch[0], y=batch[1], batch_idx=batch_idx)
+        values = self.calculateLoss(x=batch[0], y=batch[1], batch_idx=batch_idx)
         
         #Accumolo il valore della loss
         self.val_loss_metric.update(values['loss'])
@@ -214,7 +242,7 @@ class TraingBase(LightModelBase):
     
     
     def test_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int):
-        return self._commonStep(x=batch[0], y=batch[1], batch_idx=batch_idx)
+        return self.calculateLoss(x=batch[0], y=batch[1], batch_idx=batch_idx)
     
     @abstractmethod
     def update_confusion_matrix(self, y_hat: torch.Tensor, y: torch.Tensor) -> None:
@@ -292,14 +320,6 @@ class ImageClassificationBase(TraingBase):
         super().__init__(**kwargs)
         
             
-    # def configure_optimizers(self) -> tuple[list, list] :
-    #     optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
-    #     scheduler = {
-    #         'scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1),
-    #         'interval': 'epoch',
-    #     }
-    #     return [optimizer], [scheduler]
-    
 
 
 class Semantic_ImageSegmentation_TrainingBase(TraingBase):
@@ -307,43 +327,18 @@ class Semantic_ImageSegmentation_TrainingBase(TraingBase):
         super().__init__(**kwargs)
     
     
-    def configure_loss(self) -> nn.Module:
-        
-        if self._output_Classes == 1:
-            return nn.BCELoss()
-        else:
-            #return nn.NLLLoss()
-            print(f"CrossEntropyLoss loadded weights: {self._datamodule.getWeights}")
-            return nn.CrossEntropyLoss(weight=self._datamodule.getWeights)
-    
-    
-    def configure_optimizers(self) -> tuple[list, list]:
-        optimizer = torch.optim.Adam(self.parameters(), lr=self._learning_rate)#, weight_decay=1e-3,)
-        scheduler = self._make_sheduler(optimizer)
-        
-        
-        # scheduler.last_epoch = self.current_epoch
-        # scheduler.get_lr()  # Questo aggiorna internamente il learning rate del scheduler
-        # new_lr = optimizer.param_groups[0]['lr']
-        
-        # # Aggiorna manualmente l'LR (se necessario)
-        # for param_group in optimizer.param_groups:
-        #     param_group['lr'] = new_lr  # Ricalcola e aggiorna l'LR
-        
-        Globals.APP_LOGGER.info(f"lr: {optimizer.param_groups[0]['lr']}")
-        
-        # return {
-        #     'optimizer': optimizer,
-        #     'lr_scheduler': scheduler
-        # }
-        
-        return [optimizer], [scheduler]
     
     def compute_accuracy_metric(self, values: dict[str, any], batch_x: torch.Tensor, batch_y: torch.Tensor) -> None :
         predicted_classes = torch.argmax(values['y_hat'], dim=1)   # shape: (1, 48, 48)
         target_classes = torch.argmax(batch_y, dim=1)             # shape: (1, 48, 48)
     
-    
+        ignoreClass = self._datamodule.getIgnoreIndexFromLoss
+        
+        if ignoreClass >= 0:
+            mask = target_classes != ignoreClass
+            predicted_classes = predicted_classes[mask]
+            target_classes = target_classes[mask]
+        
         
         #aggiunge i risultati di ogni batch alla metrica
         self.val_accuracy_metric.update(predicted_classes, target_classes)

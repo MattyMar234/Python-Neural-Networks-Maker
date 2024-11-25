@@ -5,6 +5,7 @@ import torch.nn as nn
 from torch.nn import Module, Sequential
 
 from DatasetComponents.DataModule.DataModuleBase import DataModuleBase
+import Globals
 from Networks.NetworkComponents.TrainingModel import Semantic_ImageSegmentation_TrainingBase
 from ...NetworkComponents.NeuralNetworkBase import *
 
@@ -14,15 +15,50 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
     _FEATURES: Final[Tuple[int, int, int, int]] = (64,128,256,512)
     
     def __init__(self, **kwargs) -> None:
-        assert len(_UnetBase._FEATURES) == 4, "The number of features must be 4"
-        assert all(i > 0 for i in _UnetBase._FEATURES), "The features must be positive integers"
-        
         super().__init__(**kwargs)
+        
+        if kwargs.get('features') is None:
+            self._features = self._FEATURES
+        else:
+            self._features = kwargs['features']
+        
+        
+        #assert len(self._features) == 4, "The number of features must be 4"
+        assert all(i > 0 for i in self._features), "The features must be positive integers"
+        
         
         self._EncoderBlocks = nn.ModuleList()
         self._Bottleneck = nn.ModuleList()
         self._DecoderBlocks = nn.ModuleList()
         self._OutputLayer = nn.Sequential()
+        
+        
+    def configure_loss(self) -> nn.Module:
+        
+        if self._output_Classes == 1:
+            return nn.BCELoss()
+        else:
+            Globals.APP_LOGGER.info(f"CrossEntropyLoss parametre:")
+            Globals.APP_LOGGER.info(f"ignoreIndexFromLoss: {self._datamodule.getIgnoreIndexFromLoss}")
+            Globals.APP_LOGGER.info(f"getWeights: {self._datamodule.getWeights}")
+            
+            # Ignora i pixel con classe "ignoreIndexFromLoss"
+            return nn.CrossEntropyLoss(weight=self._datamodule.getWeights, ignore_index=self._datamodule.getIgnoreIndexFromLoss)
+    
+    
+    def calculateLoss(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
+        #y_hat = self.__net(x)
+        y_hat = self.forward(x)
+        loss: float = 0.0
+    
+        if self._datamodule.getIgnoreIndexFromLoss >= 0 and self._datamodule.use_oneHot_encoding:
+            y = y.argmax(dim=1)
+            loss = self._lossFunction(y_hat, y)
+        else:
+            loss = self._lossFunction(y_hat, y.squeeze(1))
+            
+        return {"loss": loss, "y_hat": y_hat}
+        
         
     def forward(self, x) -> torch.Tensor | None :
         
@@ -79,7 +115,7 @@ class UNET_2D(_UnetBase):
         
         in_feat = self._in_Channel
         
-        for feature in _UnetBase._FEATURES:
+        for feature in self._features:
             self._EncoderBlocks.append(
                 Multiple_Conv2D_Block(
                     num_convs=2,
@@ -96,8 +132,8 @@ class UNET_2D(_UnetBase):
         self._Bottleneck.append(
             Multiple_Conv2D_Block(
                 num_convs=2,
-                in_channels=_UnetBase._FEATURES[-1],
-                out_channels=_UnetBase._FEATURES[-1]*2,
+                in_channels=self._features[-1],
+                out_channels=self._features[-1]*2,
                 kernel_size=3,
                 stride=1,
                 padding=1,
@@ -106,7 +142,7 @@ class UNET_2D(_UnetBase):
         )
         
         
-        for feature in reversed(_UnetBase._FEATURES):
+        for feature in reversed(self._features):
             self._DecoderBlocks.append(
                 nn.ConvTranspose2d(
                     in_channels=feature*2,
@@ -129,7 +165,7 @@ class UNET_2D(_UnetBase):
             
         self._OutputLayer.append(
             nn.Conv2d(
-                in_channels=_UnetBase._FEATURES[0],
+                in_channels=self._features[0],
                 out_channels=self._out_channel,
                 kernel_size=1
             )
@@ -174,7 +210,7 @@ class UNet_3D(_UnetBase):
         #================ ENCODER ================#
         in_feat = self._in_Channel
         
-        for feature in _UnetBase._FEATURES:
+        for feature in self._features:
             self._EncoderBlocks.append(
                 Multiple_Conv3D_Block(
                     num_convs=2,
@@ -192,8 +228,8 @@ class UNet_3D(_UnetBase):
         self._Bottleneck.append(
             Multiple_Conv3D_Block(
                 num_convs=2,
-                in_channels=_UnetBase._FEATURES[-1],
-                out_channels=_UnetBase._FEATURES[-1]*2,
+                in_channels=self._features[-1],
+                out_channels=self._features[-1]*2,
                 kernel_size=3,
                 stride=1,
                 padding=1,
@@ -201,7 +237,7 @@ class UNet_3D(_UnetBase):
             )
         )
         #================ DECODER ================#
-        for feature in reversed(_UnetBase._FEATURES):
+        for feature in reversed(self._features):
             self._DecoderBlocks.append(
                 Deconv3D_Block(
                     in_channels=feature*2,
@@ -225,7 +261,7 @@ class UNet_3D(_UnetBase):
             
         self._OutputLayer = nn.Sequential(
             nn.Conv3d(
-                in_channels=_UnetBase._FEATURES[0],
+                in_channels=self._features[0],
                 out_channels=1,
                 kernel_size=(1,1,1),
                 stride=(1,1,1),

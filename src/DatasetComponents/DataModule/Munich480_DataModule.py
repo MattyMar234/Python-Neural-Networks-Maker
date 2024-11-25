@@ -71,6 +71,7 @@ class Munich480_DataModule(DataModuleBase):
     
     _KAGGLE_DATASET_URL: Final[str] = "https://www.kaggle.com/datasets/artelabsuper/sentinel2-munich480"
     _CLASSES_FILE = "classes.txt"
+    _ONE_HOT: Final[bool] = True
 
     MAP_COLORS: Dict[int, str] = _generate_distinct_colors(27)
     MAP_COLORS_AS_RGB_LIST: Dict[int, List[int]] = {key: hex_to_rgb(value) for key, value in MAP_COLORS.items()}
@@ -145,6 +146,15 @@ class Munich480_DataModule(DataModuleBase):
             #transforms.Resize((572, 572)),
             #transforms.ToTensor()
         ])
+    
+    @property 
+    #@lru_cache
+    def use_oneHot_encoding(self) -> bool:
+        return Munich480_DataModule._ONE_HOT
+    
+    @property 
+    def getIgnoreIndexFromLoss(self) -> int:
+        return 0
     
     @property
     def input_channels(self) -> int:
@@ -351,31 +361,22 @@ class Munich480_DataModule(DataModuleBase):
         # q = table.getElementAt_Query(0)
         # print(q)
 
-        startTime = time.time()
-        self._TEST.getItems(0)
-        print(f"Time to fetch: {time.time() - startTime}")
-        
-        startTime = time.time()
-        self._TEST.getItems(0)
-        print(f"Time to fetch: {time.time() - startTime}")
-        
-        # retrieved_tensor_x = pickle.loads(result[1])
-        # retrieved_tensor_y = pickle.loads(result[2])
-        # print(f"Time to rebuild: {time.time() - startTime}")
-        
-        #print(y, retrieved_tensor_y)
         
         
         
-        return
+        
+        
         
         confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
     
     
         checkpoint = torch.load(kwargs["ckpt_path"], map_location=torch.device(device))
-        model.load_state_dict(checkpoint["state_dict"])
+        print(checkpoint)
+        model.load_state_dict(checkpoint["state_dict"], strict=False)
         model.to(device)
         model.eval()
+        
+        return
         
         idx = kwargs["idx"]
         

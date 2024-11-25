@@ -9,7 +9,7 @@ import torch
 from abc import abstractmethod
 import os
 
-from Networks.NetworkComponents.NeuralNetworkBase import ModelBase
+#from Networks.NetworkComponents.NeuralNetworkBase import ModelBase
 
 
 class DataModuleBase(pl.LightningDataModule):
@@ -56,6 +56,15 @@ class DataModuleBase(pl.LightningDataModule):
         
         return self._classes_weights
     
+    @property 
+    @abstractmethod
+    def getIgnoreIndexFromLoss(self) -> int:
+        return -100
+    
+    @property 
+    @abstractmethod
+    def use_oneHot_encoding(self) -> bool:
+        raise NotImplementedError("use_oneHot_encoding method must be implemented")
     
     @property 
     @abstractmethod  
@@ -98,7 +107,7 @@ class DataModuleBase(pl.LightningDataModule):
         ...
     
     @abstractmethod 
-    def on_work(self, model: ModelBase, device: torch.device,**kwargs) -> None:
+    def on_work(self, model, device: torch.device,**kwargs) -> None:
         raise NotImplementedError("on_work method must be implemented")
 
     

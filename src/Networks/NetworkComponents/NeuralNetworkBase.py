@@ -9,6 +9,8 @@ from torchinfo import summary
 from abc import ABC, abstractmethod
 from enum import Enum
 
+from DatasetComponents.DataModule.DataModuleBase import DataModuleBase
+
 
 
 class PoolType(Enum):
@@ -43,7 +45,7 @@ class LightModelBase(pl.LightningModule):
     def __init__(self, **kwargs) -> None:
         super().__init__()
         
-        self._datamodule = kwargs.get("datamodule")
+        self._datamodule: DataModuleBase = kwargs.get("datamodule")
         self._in_Channel:int = self._datamodule.input_channels
         self._out_channel: int = self._datamodule.output_classes
         self._output_Classes: int = self._datamodule.output_classes
