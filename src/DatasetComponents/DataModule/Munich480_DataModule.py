@@ -371,12 +371,11 @@ class Munich480_DataModule(DataModuleBase):
     
     
         checkpoint = torch.load(kwargs["ckpt_path"], map_location=torch.device(device))
-        print(checkpoint)
+        #print(checkpoint)
         model.load_state_dict(checkpoint["state_dict"], strict=False)
         model.to(device)
         model.eval()
         
-        return
         
         idx = kwargs["idx"]
         
@@ -384,7 +383,7 @@ class Munich480_DataModule(DataModuleBase):
             idx = idx % len(self._TEST)
 
             with torch.no_grad():  
-                data: Dict[str, any] = self._TEST.getItems(idx)
+                data: Dict[str, any] = self._TEST.getItem(idx)
                 
                 x = data['x']
                 y = data['y']
