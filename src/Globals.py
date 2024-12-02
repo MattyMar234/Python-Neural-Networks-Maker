@@ -18,6 +18,12 @@ if not os.path.exists(MODELS_TRAINING_FOLDER):
 
 if not os.path.exists(MODELS_OUTPUT_FOLDER):
     os.makedirs(MODELS_OUTPUT_FOLDER)
+    
+#============================ MATPLOTLIB ============================#
+MATPLOTLIB_OUTPUT_FOLDER: Final[str] = os.path.join(DATA_PATH, 'Matplotlib_Output')
+
+if not os.path.exists(MATPLOTLIB_OUTPUT_FOLDER):
+    os.makedirs(MATPLOTLIB_OUTPUT_FOLDER)
 
 #============================ LOGGER ============================#
 LOGGER_VERSION: Final[str] = "loggerVersion"

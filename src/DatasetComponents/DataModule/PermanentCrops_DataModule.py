@@ -33,7 +33,7 @@ import time
 
 class PermanentCrops_DataModule(DataModuleBase):
     
-    TemporalSize: Final[int] = 167
+    TemporalSize: Final[int] = 62
     ImageChannels: Final[int] = 13
     ImageWidth: Final[int] = 48*2
     ImageHeight: Final[int] = 48*2
@@ -41,6 +41,14 @@ class PermanentCrops_DataModule(DataModuleBase):
     
     _SINGLETON_INSTANCE = None
     _ONE_HOT: Final[bool] = True
+    _USE_CACHING:  Final[bool] = True
+    
+    MAP_COLORS: Dict[int, str] = {
+        0 : "#3c3c3c",
+        1 : "#ff0000",
+        2 : "#00ff00",
+        3 : "#0000ff"
+    }
     
 
     
@@ -132,6 +140,241 @@ class PermanentCrops_DataModule(DataModuleBase):
         if not self._setup_done:
             self.setup()
             
+        filePath = os.path.join(Globals.TEMP_DATA,f"{self.__class__.__name__}", "classes_weight.pickle")
+        
+        if PermanentCrops_DataModule._USE_CACHING and os.path.exists(filePath):
+            with open(filePath, "rb") as f:
+                return pickle.load(f)
+            
+            
+        core: int | None = min(os.cpu_count(), 14)
+        batch_size = 4
+        
+        if core == None:
+            core = 0 
+        else:
+            batch_size = core * 20
+        
+        self._TRAINING.setLoadOnlyY(True)
+        
+        temp_loader = DataLoader(
+            self._TRAINING,  # Assuming self._TRAIN is a Dataset object
+            batch_size=batch_size,  # Set batch_size=1 for individual sample processing
+            num_workers=core,
+            shuffle=False,
+            persistent_workers=False,
+            pin_memory=False,
+            prefetch_factor=None
+        )
+        
+        Globals.APP_LOGGER.info("Calulating classes weight...")
+        
+        y_flat: torch.Tensor = torch.empty((len(self._TRAINING) * PermanentCrops.ImageWidth * PermanentCrops.ImageHeight), dtype=torch.uint8)
+        index: int = 0
+    
+        for i, (_, y) in enumerate(temp_loader):
+            print(f"Loading: {min(i + 1, len(temp_loader))}/{len(temp_loader)}", end="\r")
+            
+            y = y.flatten()
+            elementCount = y.shape[0]
+            y_flat[index: index + elementCount] = y
+            index += elementCount
+            
+        print()
+    
+        
+        y_flat = y_flat.numpy()
+        available_classes = np.unique(y_flat)
+        
+        class_weights = compute_class_weight(
+            class_weight='balanced',  # Opzione per bilanciare in base alla frequenza
+            classes=available_classes,  # Array di tutte le classi
+            y=y_flat
+        )
+        
+        # Mappa i pesi su tutte le classi, assegnando peso 0 alle classi assenti
+        weights = np.zeros(PermanentCrops.ClassesCount, dtype=np.float32)
+        weights[available_classes] = class_weights
+        weights_tensor = torch.tensor(weights, dtype=torch.float32)
+
+        Globals.APP_LOGGER.info(f"Calculated classes weight: {weights_tensor}")
+
+        self._TRAINING.setLoadOnlyY(False)
+        
+        
+        if PermanentCrops_DataModule._USE_CACHING:
+            folder = os.path.dirname(filePath)
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            
+            with open(filePath, "wb") as f:
+                pickle.dump(weights_tensor, f)
+        
+        return weights_tensor
+    
+         
             
     def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
-        print(self._TRAINING[0])
+        
+        
+        model.to(device)
+        model.eval()
+        
+        
+        idx = kwargs["idx"]
+        confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 4, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
+        if idx >= 0:
+            idx = idx % len(self._TEST)
+
+            with torch.no_grad():  
+                data: Dict[str, any] = self._TEST.getItem(idx)
+                
+                x = data['x']
+                y = data['y']
+                y = y.unsqueeze(0)
+                x = x.to(device)
+                
+                print(x.shape, y.shape)
+                
+                y_hat = model(x.unsqueeze(0))
+                
+                y_hat_ = torch.argmax(y_hat, dim=1)
+                y_ = torch.argmax(y, dim=1)
+                
+                
+                
+                print(y_hat_.shape, y_.shape)
+    
+                y_ = y_.cpu().detach()
+                y_hat_ = y_hat_.cpu().detach()
+                
+                confMatrix.update(y_pr=y_hat_, y_tr=y_)
+                _, graphData = confMatrix.compute(showGraph=False)
+                
+                confMatrix.reset()
+            
+                self.show_processed_sample(x, y_hat_, y_, idx, graphData)
+            return
+        
+        
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = True) -> None:
+        assert x is not None, "x is None"
+        assert y_hat is not None, "y_hat is None"
+        assert y is not None, "y is None"
+        
+        
+        if len(y_hat.shape) == 3:
+            y_hat = y_hat.squeeze(0)
+        if len(y.shape) == 3:
+            y = y.squeeze(0)
+        
+        print(y_hat.shape, y.shape)
+        
+        
+        x = x.cpu().detach()
+        x = x.squeeze(0) # elimino la dimensione della batch
+        
+        if temporalSequenze:
+            x = x.permute(1, 0, 2, 3)
+            x = x.reshape(-1, PermanentCrops_DataModule.ImageWidth, PermanentCrops_DataModule.ImageHeight)
+            
+        if X_as_Int:
+            x = x.int()
+        else :
+            x = ((x * (2**16 - 1))*1e-4)
+            x *= 255
+            x = x.int()
+            x += 40
+            x = x.clamp(0, 255)
+            
+        
+        y_hat = y_hat.cpu().detach()
+        y = y.cpu().detach()
+        
+        
+        #fig, axes = plt.subplots(rowElement, (num_images // rowElement) + (num_images % rowElement != 0) + 3, figsize=(16, 12))  # Griglia verticale per ogni immagine
+
+        
+
+        #=========================================================================#
+        # Prima finestra: Visualizzazione delle immagini RGB
+        rowElement: int = 8
+        num_images: int = int(x.shape[0] // 13)  # Numero di immagini nel batch
+        num_cols: int = (num_images // rowElement) + (num_images % rowElement != 0)
+        
+        fig1, axes1 = plt.subplots(rowElement, num_cols, figsize=(10, 12))
+        fig1.suptitle(f"Index {index}")
+        
+        for idx in range(num_images):
+            row: int = idx % rowElement
+            col: int = idx // rowElement
+            
+            # Estrazione dell'immagine (13 canali)
+            image = x[idx * 13:(idx + 1) * 13, :, :]
+            red, green, blue = image[2], image[1], image[0]
+            rgb_image = torch.stack([red, green, blue], dim=0).permute(1, 2, 0).numpy()
+
+            ax = axes1[row, col]
+            ax.imshow(rgb_image)
+            ax.set_title(f"Image {idx+1}")
+            ax.axis('off')
+        
+        
+        # Crea una colormap personalizzata
+        color_list = [color for _, color in sorted(PermanentCrops_DataModule.MAP_COLORS.items())]
+        cmap = ListedColormap(color_list)
+        
+        label_map = y.numpy()         # Etichetta per l'immagine corrente
+        pred_map = y_hat.numpy()      # Predizione con massimo di ciascun layer di `y_hat`
+        
+        
+        fig2, axes2 = plt.subplots(1, 2, figsize=(10, 5))
+        fig2.suptitle("Feature Maps: Label Map and Prediction Map")
+        
+            # Mappa etichetta `y`
+        axes2[0].imshow(label_map, interpolation='none', cmap=cmap)
+        axes2[0].set_title("Label Map")
+        axes2[0].axis('off')
+        
+        # Mappa predizione `y_hat`
+        axes2[1].imshow(pred_map, interpolation='none', cmap=cmap)
+        axes2[1].set_title("Prediction Map")
+        axes2[1].axis('off')
+        
+        # Aggiungi legenda accanto alla seconda figura
+        #legend_patches = [mpatches.Patch(color=Munich480_DataModule.MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in self._classesMapping.items()]
+        #fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper right', title="Class Colors")
+
+        fig1.subplots_adjust(right=0.8)
+        fig2.subplots_adjust(right=0.7)
+        
+        fig1.tight_layout(pad=2.0)
+        
+        # fig3, axes3 = plt.subplots(1, 1, figsize=(10, 5))
+        # axes3.imshow(confusionMatrix, cmap='hot')
+        
+        # Finestra 3: Matrice di confusione
+        
+        
+        plt.figure("Confusion Matrix", figsize=(8, 6))
+        sns.heatmap(
+            data=confusionMatrixData['data'], 
+            annot=confusionMatrixData['annot'], 
+            fmt=confusionMatrixData['fmt'], 
+            cmap=confusionMatrixData['cmap'], 
+            cbar=confusionMatrixData['cbar'],
+            xticklabels=confusionMatrixData['xticklabels'], 
+            yticklabels=confusionMatrixData['yticklabels']
+        )
+        plt.xlabel("Predicted Label")
+        plt.ylabel("True Label")
+        plt.title("Confusion Matrix")
+        plt.tight_layout()
+        
+        
+        #plt.imshow(confusionMatrix)
+        plt.show()
+        
+        for fignum in plt.get_fignums():  # Ottieni i numeri delle figure aperte
+            fig = plt.figure(fignum)     # Accedi alla figura
+            fig.savefig(os.path.join(Globals.MATPLOTLIB_OUTPUT_FOLDER, f"grafico_{fignum}.png"))

@@ -101,6 +101,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
                 self._dataDict = pickle.load(f)
             serialized = True
         
+        
         if not serialized:
             match mode:
                 case DatasetMode.TRAINING:    
@@ -120,7 +121,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
                         
                         self._dataDict[tile] = {
                             "data" : training,
-                            "range" : (totalPaches, totalPaches + len(training))
+                            "range" : (totalPaches, totalPaches + len(training) - 1)
                         }
                         totalPaches += len(training)
                         
@@ -140,7 +141,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
 
                         self._dataDict[tile] = {
                             "data" : validation,
-                            "range" : (totalPaches, totalPaches + len(validation))
+                            "range" : (totalPaches, totalPaches + len(validation) - 1)
                         }
                         totalPaches += len(validation)
 
@@ -157,7 +158,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
 
                         self._dataDict[tile] = {
                             "data" : folders,
-                            "range" : (totalPaches, totalPaches + len(folders))
+                            "range" : (totalPaches, totalPaches + len(folders) - 1)
                         }
                         totalPaches += len(folders)
 
@@ -171,7 +172,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
                 pickle.dump(self._dataDict, f)
             serialized = True
             
-        Globals.APP_LOGGER.info(f"{mode} PermanentCrops dataset total paches: {totalPaches}")
+        Globals.APP_LOGGER.info(f"{mode} PermanentCrops dataset total paches: {self._dataDict[PermanentCrops._PACHES_COUNT_DICT_KEY]}")
         for key in self._dataDict.keys():
             if key != PermanentCrops._PACHES_COUNT_DICT_KEY:
                 Globals.APP_LOGGER.info(f"{mode} PermanentCrops dataset {key} paches range: {self._dataDict[key]['range']}")
@@ -192,7 +193,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
             idx_min = patchData["range"][0]
             idx_max = patchData["range"][1]
 
-            if index >= idx_min and idx_max:
+            if index >= idx_min and index <= idx_max:
                 idx = index - idx_min
                 data_folder_path = os.path.join(self._folderPath, keys,  patchData["data"][idx])
 
@@ -250,7 +251,6 @@ class PermanentCrops(Segmentation_Dataset_Base):
     
     def _load_dif_file(self, filePath:str, normalize: bool = True) -> Dict[str,any]:
         
-        print(f"Loading {filePath}")
         
         with rasterio.open(filePath) as src:
             data = src.read()
@@ -261,9 +261,15 @@ class PermanentCrops(Segmentation_Dataset_Base):
             data = self._normalize_dif_data(data = data, profile = profile)
         return {"data" : data, "profile" : profile}
     
+    def get_y_value(self, idx: int) -> Optional[torch.Tensor]:
+        assert idx < self.__len__() and idx >= 0, f"Index {idx} out of range"
+        y = self._load_y(self._mapIndex(idx))
+        return torch.from_numpy(y)
+    
     def _load_y(self, folder:str) -> np.array:
         y = self._load_dif_file(filePath=os.path.join(folder, "y.tif"), normalize = False)["data"]
-        y = y.astype(np.uint8)
+        #y = y.astype(np.uint8)
+        
         y = np.where(y == 0, 220, y)
         y = y - 220
         
@@ -330,6 +336,10 @@ class PermanentCrops(Segmentation_Dataset_Base):
         
         #y = torch.squeeze(y, dim=0)
         #(1, 48, 48) -> (48, 48)
+        
+        # np.set_printoptions(threshold=np.inf)
+        # print(y)
+        
         y = np.squeeze(y, axis=0)
         y = torch.from_numpy(y)
         
@@ -347,6 +357,8 @@ class PermanentCrops(Segmentation_Dataset_Base):
         dictData.pop('profile', None)
         
         #print(x.shape, y.shape) ---> torch.Size([48, 48, 832]) np.size(48, 48)
+    
+        
     
         return dictData   
     
@@ -406,4 +418,8 @@ class PermanentCrops(Segmentation_Dataset_Base):
     def adjustData(self, items: dict[str, any]) -> dict[str, any]:
         # y = items['y']
         # items['y'] = y.long()
+        #print(items['x'].shape, items['y'].shape)
+        
+        
+        
         return items

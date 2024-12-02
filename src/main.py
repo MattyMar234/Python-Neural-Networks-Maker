@@ -149,6 +149,7 @@ def main() -> None:
     # parser.add_argument("--epochs", type=int, default=1)
     
     # sudo -E python main.py --test --ckpt_path /app/Models/UNET_2D/checkpoints/last.ckpt --idx 2002
+    #python main.py --train --arch UNet_3D --dataset=PermanentCrops --datasetPath=/home/super/datasets-nas
     
     if '--help' in sys.argv or '-help' in sys.argv or '-h' in sys.argv:
         parser.print_help()

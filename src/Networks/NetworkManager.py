@@ -41,10 +41,12 @@ class NetworkManager:
         self._model:L.LightningModule = model
         self._args: argparse.Namespace | None = args
         
+        trainFolderName = f"{model.__class__.__name__}-{args.dataset}"
+        
         if workingFolder == None or workingFolder == "":
-            self._workingFolder = os.path.join(os.getcwd(), model.__class__.__name__)
+            self._workingFolder = os.path.join(os.getcwd(), trainFolderName)
         else:
-            self._workingFolder = os.path.join(workingFolder, model.__class__.__name__)
+            self._workingFolder = os.path.join(workingFolder, trainFolderName)
         
         if not os.path.exists(self._workingFolder):
             os.makedirs(self._workingFolder)
