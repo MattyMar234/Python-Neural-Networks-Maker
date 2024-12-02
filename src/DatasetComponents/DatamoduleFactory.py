@@ -1,6 +1,7 @@
 from argparse import Namespace
 from enum import Enum
 
+from DatasetComponents.DataModule.PermanentCrops_DataModule import PermanentCrops_DataModule
 from DatasetComponents.Datasets.DatasetBase import DatasetBase
 from DatasetComponents.DataModule.Munich480_DataModule import *
 
@@ -15,6 +16,7 @@ class AvailableDatabodule(Enum):
     MUNICH_3D = "Munich_3D"
     MUNICH_2D_postgres = "Munich_2D_postgres"
     MUNICH_3D_postgres = "Munich_3D_postgres"
+    PERMANENT_CROPS = "PermanentCrops"
     
     @classmethod
     def values(cls):
@@ -45,6 +47,14 @@ def makeDatamodule(datasetName: str, args: Namespace) -> DatasetBase:
                 num_workers=args.workers,
                 useTemporalSize=True,
                 year= Munich480.Year.Y2016,
+                args = args
+            )
+            
+        case AvailableDatabodule.PERMANENT_CROPS:
+            return PermanentCrops_DataModule(
+                datasetFolder = os.path.join(Globals.DATASET_FOLDER, "permanent_crops", "dataset96"),
+                batch_size=args.batch_size,
+                num_workers=args.workers,
                 args = args
             )
             

@@ -103,7 +103,7 @@ class Munich480_DataModule(DataModuleBase):
     ):
         super().__init__(datasetFolder, batch_size, num_workers, args)
 
-        assert os.path.exists(datasetFolder), f"La cartella {datasetFolder} non esiste"
+        
         assert type(year) == Munich480.Year, f"year deve essere di tipo Munich480.Year"
         
         
@@ -114,20 +114,13 @@ class Munich480_DataModule(DataModuleBase):
         self._setup_done = False
         
         self._year = year
-        self._persistent_workers: bool = True
-        self._pin_memory: bool = True
+        
         self._useTemporalSize = useTemporalSize
         self._total_channel = 13
-        self._prefetch_factor: int | None = 1
-        
-        
         self._classesMapping: dict = {}
         self._read_classes()
         
-        if self._num_workers == 0:
-            self._persistent_workers = False
-            self._pin_memory = False
-            self._prefetch_factor = None
+       
         
             
         if not useTemporalSize:

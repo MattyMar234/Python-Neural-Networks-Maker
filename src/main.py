@@ -95,6 +95,7 @@ def main() -> None:
     parser.add_argument('--ckpt_path',         type=Path,   default=None,            help='checkpoint or pretrained path')
     parser.add_argument('--ouputs',            type=Path,   default=Globals.MODELS_TRAINING_FOLDER,  help='logs and data output path')
     parser.add_argument('--data_dir',          type=Path,   default=Path.cwd().parent)
+    parser.add_argument('--datasetPath',       type=Path,    default=Globals.DATASET_FOLDER)
     parser.add_argument('--dataset',           type=str,    default='?',             choices=DatamoduleFactory.AvailableDatabodule.values())
     parser.add_argument('--test_id',           type=str,    default='A',             choices=['A', 'Y'])
     parser.add_argument('--arch',              type=str,    default='?',             choices= NetArchs.AvailableArchitetture.keys())
@@ -155,6 +156,8 @@ def main() -> None:
     
     args = parser.parse_args()
     
+    
+    Globals.DATASET_FOLDER = args.datasetPath
     
     if not args.test and not args.train and not args.summary and not args.work:
         Globals.APP_LOGGER.error("Please specify at least one of the following operation options: --train, --test, --summary, --work")

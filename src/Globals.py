@@ -11,7 +11,7 @@ DATA_PATH: Final[Path] = Path(os.getcwd()).parent.absolute()
 MODELS_TRAINING_FOLDER: Final[str] = os.path.join(DATA_PATH, 'Models')
 MODELS_OUTPUT_FOLDER: Final[str] = os.path.join(DATA_PATH, 'Models_Output')
 TEMP_DATA: Final[str] = os.path.join(DATA_PATH, 'temp')
-DATASET_FOLDER: Final[str] = "/dataset"
+DATASET_FOLDER: str = "/dataset"
 
 if not os.path.exists(MODELS_TRAINING_FOLDER):
     os.makedirs(MODELS_TRAINING_FOLDER)

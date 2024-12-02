@@ -1,5 +1,6 @@
 
 from argparse import Namespace
+from enum import Enum, auto
 from multiprocessing import process
 import os
 import pickle

@@ -1,5 +1,6 @@
 from argparse import Namespace
 from ast import Tuple
+from enum import Enum, auto
 from typing import List, Optional
 import numpy as np
 import opendatasets
@@ -10,11 +11,18 @@ from abc import abstractmethod
 import os
 
 #from Networks.NetworkComponents.NeuralNetworkBase import ModelBase
-
+class DatasetMode(Enum):
+    TRAINING = auto()
+    TEST = auto()
+    VALIDATION = auto()
 
 class DataModuleBase(pl.LightningDataModule):
     def __init__(self, datasetFolder:str, batch_size: int = 1, num_workers: int  = 1, args: Namespace | None = None):
         super().__init__()
+        
+        
+        errorStr = f"La cartella {datasetFolder} non esiste"
+        assert os.path.exists(datasetFolder), errorStr
         
         assert batch_size > 0, "Batch size must be greater than 0"
         assert num_workers >= 0, "Number of workers must be greater than or equal to 0"
@@ -26,6 +34,16 @@ class DataModuleBase(pl.LightningDataModule):
         self._num_workers = num_workers
         self._classes_weights: torch.Tensor | None = None
         self._args: Namespace | None = args
+        
+        self._prefetch_factor: int | None = 1
+        self._persistent_workers: bool = True
+        self._pin_memory: bool = True
+        
+        if self._num_workers == 0:
+            self._persistent_workers = False
+            self._pin_memory = False
+            self._prefetch_factor = None
+        
 
     @property
     @abstractmethod
@@ -55,7 +73,8 @@ class DataModuleBase(pl.LightningDataModule):
         return None
       
     @abstractmethod
-    def classesToIgnore(self) -> List[int]: 
+    def classesToIgnore(self) -> List[int]:
+        return [] 
         raise NotImplementedError("classesToIgnore method must be implemented")
     
 
