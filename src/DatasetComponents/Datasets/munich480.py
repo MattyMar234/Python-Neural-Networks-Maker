@@ -263,7 +263,7 @@ class Munich480(Segmentation_Dataset_Base):
         return {"data" : data, "profile" : profile}
                 
         
-    def _load_y(self, folder:str):
+    def _load_y(self, folder:str)-> np.array:
         return self._load_dif_file(filePath=os.path.join(folder, "y.tif"), normalize = False)["data"]
         
         

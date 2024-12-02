@@ -127,9 +127,11 @@ class PermanentCrops_DataModule(DataModuleBase):
     def test_dataloader(self) -> DataLoader:
         return DataLoader(self._TEST, batch_size=self._batch_size, num_workers=self._num_workers, shuffle=False, pin_memory=self._pin_memory, persistent_workers=self._persistent_workers, drop_last=True, prefetch_factor=self._prefetch_factor)
     
-    def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
-        pass
     
     def calculate_classes_weight(self) ->torch.tensor:
         if not self._setup_done:
             self.setup()
+            
+            
+    def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
+        print(self._TRAINING[0])

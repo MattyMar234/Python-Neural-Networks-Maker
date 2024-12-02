@@ -205,6 +205,7 @@ class DatasetBase(Dataset):
     
     def _one_hot_encode_no_cache(self, labels: any):
         labels_tensor = labels.clone().detach().long()
+        
         one_hot = torch.nn.functional.one_hot(labels_tensor, num_classes=self._classesCount)
         return one_hot
 
