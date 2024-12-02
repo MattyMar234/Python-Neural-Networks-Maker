@@ -120,11 +120,14 @@ def main() -> None:
     parser.add_argument(f'--{str(Globals.MILESTONES)}',     type=str,   default=[10], nargs='+')
     parser.add_argument(f'--{Globals.POWER}',               type=float, default=1)
     
-    parser.add_argument(f'--{Globals.DB_PORT}', type=str, default=str(os.environ['DB_PORT']))
-    parser.add_argument(f'--{Globals.DB_HOST}', type=str, default=str(os.environ['DB_HOST']))
-    parser.add_argument(f'--{Globals.DB_NAME}', type=str, default=str(os.environ['DB_NAME']))
-    parser.add_argument(f'--{Globals.DB_USER}', type=str, default=str(os.environ['DB_USER']))
-    parser.add_argument(f'--{Globals.DB_PASSWORD}', type=str, default=str(os.environ['DB_PASSWORD']))
+    try:
+        parser.add_argument(f'--{Globals.DB_PORT}', type=str, default=str(os.environ['DB_PORT']))
+        parser.add_argument(f'--{Globals.DB_HOST}', type=str, default=str(os.environ['DB_HOST']))
+        parser.add_argument(f'--{Globals.DB_NAME}', type=str, default=str(os.environ['DB_NAME']))
+        parser.add_argument(f'--{Globals.DB_USER}', type=str, default=str(os.environ['DB_USER']))
+        parser.add_argument(f'--{Globals.DB_PASSWORD}', type=str, default=str(os.environ['DB_PASSWORD']))
+    except:
+        pass
     
     
     parser.add_argument(f'--{Globals.ENABLE_DATABASE}', action='store_true')

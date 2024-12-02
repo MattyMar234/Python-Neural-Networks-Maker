@@ -58,6 +58,17 @@ class ColoredFormatter(logging.Formatter):
         return message
 
 
+def _get_handler_by_name(logger: logging.Logger, name: str) -> logging.Handler:
+    if Globals.PYTHON_VERSION >= 3.12:  # Controllo sulla versione di Python
+        return logging.getHandlerByName(name)
+    else:
+        # Metodo alternativo per versioni precedenti
+        for handler in logger.handlers:
+            if handler.get_name() == name:
+                return handler
+    return None
+
+
 def setupLogging() -> None:
     
     #global APP_LOGGER
@@ -68,10 +79,11 @@ def setupLogging() -> None:
     with open(Globals.LOGGERS_CONFIG_FILE, 'r') as file:
         configuration = json.load(file)
     
+    
     logging.config.dictConfig(configuration)
     
     Globals.APP_LOGGER = logging.getLogger(Globals.APP_LOGGER_NAME)
-    consoleHandler: logging.Handler = logging.getHandlerByName(Globals.CONSOLE_LOGGER_NAME)
+    consoleHandler: logging.Handler = _get_handler_by_name(logger=Globals.APP_LOGGER, name=Globals.CONSOLE_LOGGER_NAME)
     
     console_format = consoleHandler.formatter
     consoleHandler.setFormatter(ColoredFormatter(console_format))

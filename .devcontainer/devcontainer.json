@@ -10,8 +10,8 @@
     //   "terminal.integrated.shell.linux": "/bin/bash"
     // },
 
-    "dockerComposeFile": ["../docker-compose.yml"],
-    "service": "dev",  // Nome del servizio Dev nel docker-compose.yml
+    // "dockerComposeFile": ["../docker-compose.yml"],
+    // "service": "dev",  // Nome del servizio Dev nel docker-compose.yml
     "workspaceFolder": "/app",
     "runArgs": ["--gpus", "all", "--shm-size=1g"],
     "postCreateCommand": "pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt",
@@ -22,11 +22,11 @@
         "source=//c/Users/Utente/Desktop/Datasets,target=/dataset,type=bind"
     ],
 
-    "remoteEnv": {
-        "POSTGRES_USER": "${localEnv:POSTGRES_USER}",
-        "POSTGRES_PASSWORD": "${localEnv:POSTGRES_PASSWORD}",
-        "POSTGRES_DB": "${localEnv:POSTGRES_DB}"
-    },
+    // "remoteEnv": {
+    //     "POSTGRES_USER": "${localEnv:POSTGRES_USER}",
+    //     "POSTGRES_PASSWORD": "${localEnv:POSTGRES_PASSWORD}",
+    //     "POSTGRES_DB": "${localEnv:POSTGRES_DB}"
+    // },
 
     "customizations" : {
 
@@ -34,7 +34,7 @@
         "vscode" : {
             "settings": {},
             "extensions" : [
-                "streetsidesoftware.code-spell-checker",
+                //"streetsidesoftware.code-spell-checker",
                 "ms-python.isort",
                 "njqdev.vscode-python-typehint",
                 "kaih2o.python-resource-monitor",

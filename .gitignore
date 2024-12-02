@@ -4,6 +4,7 @@
 *.ckpt
 *.tif
 *.tif.aux.xml
+.venv/
 tempCodeRunnerFile.py
 Data/
 Models/
