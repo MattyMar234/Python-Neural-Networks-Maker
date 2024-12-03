@@ -18,7 +18,7 @@ from Database.Tables import *
 from DatasetComponents.Datasets.DatasetBase import DatasetBase
 from DatasetComponents.Datasets.munich480 import Munich480
 import Globals
-from LoggerSetup import setupLogging
+from LoggerUtility import *
 from Networks.Architettures.SemanticSegmentation.UNet import UNET_2D
 import Networks.Architettures as NetArchs
 from Networks.Metrics.ConfusionMatrix import *
@@ -44,18 +44,18 @@ import logging
 
 
 def check_pytorch_cuda() -> bool:
-    Globals.APP_LOGGER.info(f"PyTorch Version: {torch.__version__}")
+    #Globals.APP_LOGGER.info(f"PyTorch Version: {torch.__version__}")
     
     if torch.cuda.is_available():
-        Globals.APP_LOGGER.info("CUDA is available.")
-        Globals.APP_LOGGER.info(f"Device found: {torch.cuda.device_count()}")
+        Globals.APP_LOGGER.info("CUDA is available on this system.")
+        Globals.APP_LOGGER.info(f"Available GPUs: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
             Globals.APP_LOGGER.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
         return True
     else:
-        Globals.APP_LOGGER.info("CUDA is not available.")
+        Globals.APP_LOGGER.info("CUDA is not available on this system.")
         return False
-
+  
 
 def trainModel(args: argparse.Namespace | None, device: str, datamodule: DataModuleBase, model: ModelBase) -> None:
     
@@ -83,31 +83,28 @@ def exportModel(args: argparse.Namespace | None, model: ModelBase) -> None:
 
 def main() -> None:
     
+    error: bool = False
     setupLogging()
     load_dotenv()
     
-    error: bool = False
-    
-    
-    
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument('--ckpt_path',         type=Path,   default=None,            help='checkpoint or pretrained path')
-    parser.add_argument('--ouputs',            type=Path,   default=Globals.MODELS_TRAINING_FOLDER,  help='logs and data output path')
+    parser.add_argument('--ckpt_path',         type=Path,   default=None, help='checkpoint or pretrained path')
+    parser.add_argument('--ouputs',            type=Path,   default=Globals.MODELS_TRAINING_FOLDER, help='logs and data output path')
     parser.add_argument('--data_dir',          type=Path,   default=Path.cwd().parent)
     parser.add_argument('--datasetPath',       type=Path,    default=Globals.DATASET_FOLDER)
-    parser.add_argument('--dataset',           type=str,    default='?',             choices=DatamoduleFactory.AvailableDatabodule.values())
-    parser.add_argument('--test_id',           type=str,    default='A',             choices=['A', 'Y'])
-    parser.add_argument('--arch',              type=str,    default='?',             choices= NetArchs.AvailableArchitetture.keys())
+    parser.add_argument('--dataset',           type=str,    default='?', choices=DatamoduleFactory.AvailableDatabodule.values())
+    parser.add_argument('--test_id',           type=str,    default='A', choices=['A', 'Y'])
+    parser.add_argument('--arch',              type=str,    default='?', choices= NetArchs.AvailableArchitetture.keys())
     parser.add_argument(f'--{Globals.EPOCHS}', type=int,    default=1)
     parser.add_argument('--batch_size',        type=int,    default=2)
     parser.add_argument('--workers',           type=int,    default=0)
-    parser.add_argument('--gpu_or_cpu',        type=str,    default='gpu',           choices=['gpu', 'cpu'])
-    parser.add_argument('--gpus',              type=int,    default=[0],             nargs='+')
+    parser.add_argument('--gpu_or_cpu',        type=str,    default='gpu',choices=['gpu', 'cpu'])
+    parser.add_argument('--gpus',              type=int,    default=[0], nargs='+')
     parser.add_argument('--idx',               type=int,    default=0)
     parser.add_argument(f'--{Globals.LOGGER_VERSION}', type=int,   default=Globals.AUTOMATIC_VERSIONANING_VALUE)
     
-    parser.add_argument(f'--{Globals.LEARNING_RATE}',       type=float, default=1e-4,            help='learning rate')
+    parser.add_argument(f'--{Globals.LEARNING_RATE}',       type=float, default=1e-4, help='learning rate')
     parser.add_argument(f'--{Globals.SCHEDULER_TYPE}',      type=str,   default=ShedulerType.NONE, choices=ShedulerType.values())
     parser.add_argument(f'--{Globals.SCHEDULER_GAMMA}',     type=float, default=1.0)
     parser.add_argument(f'--{Globals.SCHEDULER_STEP_SIZE}', type=int,   default=1)
@@ -183,8 +180,10 @@ def main() -> None:
         
     Globals.APP_LOGGER.info(args)
     
+    Globals.APP_LOGGER.info(f"{makeSeparetor('=')}")
     device: torch.device = torch.device("cuda" if args.gpu_or_cpu == 'gpu' and check_pytorch_cuda() else "cpu")
     Globals.APP_LOGGER.info(f"Device selected: {device}") 
+    
     
     if device.type == 'cuda' :
         deviceName = torch.cuda.get_device_name(device=None)
@@ -211,10 +210,11 @@ def main() -> None:
     
     
     
-    
+    Globals.APP_LOGGER.info(f"{makeSeparetor('=', '[ DATAMODULE ]')}")
     datamodule: DataModuleBase = DatamoduleFactory.makeDatamodule(datasetName=args.dataset, args=args)
+    Globals.APP_LOGGER.info(f"{makeSeparetor('=', '[ MODULE ]')}")
     NetworkModel: ModelBase = NetArchs.create_instance(args.arch, datamodule=datamodule, **vars(args))
-    
+    Globals.APP_LOGGER.info(f"{makeSeparetor('=')}")
 
     if args.summary:
         print(NetworkModel.makeSummary())

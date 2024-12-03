@@ -118,27 +118,77 @@ class NetworkManager:
             save_last=True,
         )
         
+        trainer: pl.Trainer | None = None
         
-        trainer = pl.Trainer(
-            accelerator="gpu", 
-            devices=[0],
-            max_epochs=self._args.epochs,
-            min_epochs=1, 
-            #profiler="simple", #profiler="advanced"
-            #default_root_dir= self._workingFolder,
-            enable_checkpointing=True,
-            logger=[CSV_logger, tensorBoard_logger],
+        if self._device == torch.device("cuda"):
+            if len(self._args.gpus) > 1:
+                #raise NotImplementedError("Multi-GPU training is not implemented yet")
+                strategy = "ddp"
             
-            #num_sanity_val_steps=0
+                Globals.APP_LOGGER.info(f"Training Using Multi-GPU: {self._args.gpus} with strategy: {strategy}")
             
-            # logger=pl.loggers.TensorBoardLogger(save_dir="logs/"),
-            callbacks=[
-                checkpoint_callback, 
-                #DeviceStatsMonitor()
-            ],
-            accumulate_grad_batches=1,
-            precision="bf16-mixed"#"16-true"#"16-mixed"
-        )
+                trainer = pl.Trainer(
+                    accelerator="gpu",
+                    strategy="ddp", 
+                    devices=self._args.gpus,
+                    max_epochs=self._args.epochs,
+                    min_epochs=1, 
+                    #profiler="simple", #profiler="advanced"
+                    #default_root_dir= self._workingFolder,
+                    enable_checkpointing=True,
+                    logger=[CSV_logger, tensorBoard_logger],
+                    
+                    #num_sanity_val_steps=0
+                    
+                    # logger=pl.loggers.TensorBoardLogger(save_dir="logs/"),
+                    callbacks=[
+                        checkpoint_callback, 
+                        #DeviceStatsMonitor()
+                    ],
+                    accumulate_grad_batches=1,
+                    precision="bf16-mixed"#"16-true"#"16-mixed"
+                )
+            
+            else: 
+                Globals.APP_LOGGER.info(f"Training Using GPU: {self._args.gpus}")
+                
+                trainer = pl.Trainer(
+                    accelerator="gpu", 
+                    devices=self._args.gpus,
+                    max_epochs=self._args.epochs,
+                    min_epochs=1, 
+                    #profiler="simple", #profiler="advanced"
+                    #default_root_dir= self._workingFolder,
+                    enable_checkpointing=True,
+                    logger=[CSV_logger, tensorBoard_logger],
+                    
+                    #num_sanity_val_steps=0
+                    
+                    # logger=pl.loggers.TensorBoardLogger(save_dir="logs/"),
+                    callbacks=[
+                        checkpoint_callback, 
+                        #DeviceStatsMonitor()
+                    ],
+                    accumulate_grad_batches=1,
+                    precision="bf16-mixed"#"16-true"#"16-mixed"
+                )
+            
+        if self._device == torch.device("cpu"):
+            trainer = pl.Trainer(
+                accelerator="cpu",
+                max_epochs=self._args.epochs,
+                min_epochs=1,
+                #profiler="simple", #profiler="advanced"
+                #default_root_dir= self._workingFolder,
+                enable_checkpointing=True,
+                logger=[CSV_logger, tensorBoard_logger],
+                callbacks=[
+                    checkpoint_callback,
+                    #DeviceStatsMonitor()
+                ],
+                accumulate_grad_batches=1,
+                #precision="bf16-mixed"#"16-true"#"16-mixed"
+            )
         
         if self._args.compile == 1:
             self._model = torch.compile(self._model)

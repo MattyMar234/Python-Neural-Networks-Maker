@@ -3,6 +3,7 @@ import re
 import json
 import logging
 import os
+from typing import Optional
 import Globals
 
 from colorama import init as colorama_init
@@ -57,6 +58,14 @@ class ColoredFormatter(logging.Formatter):
         record.levelname = original_levelname
         return message
 
+def makeSeparetor(ch: str, label: Optional[str] = None) -> str:
+    assert len(ch) == 1, "ch must be 1 character long"
+    size = os.get_terminal_size()[0] - 12
+    
+    if label is None:
+        return size * ch
+    else:
+        return label.center(size, ch)
 
 def _get_handler_by_name(logger: logging.Logger, name: str) -> logging.Handler:
     if Globals.PYTHON_VERSION >= 3.12:  # Controllo sulla versione di Python

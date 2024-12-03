@@ -4,8 +4,12 @@ import sys
 from typing import Any, Final, List
 from pathlib import Path
 
-PYTHON_VERSION: Final[float] = float(f"{sys.version_info.major}.{sys.version_info.minor}")#f"{sys.version_info[0]}.{sys.version_info[1]}" #3.12
 
+#=============================== GENErAL ============================#
+PYTHON_VERSION: Final[float] = float(f"{sys.version_info.major}.{sys.version_info.minor}")#f"{sys.version_info[0]}.{sys.version_info[1]}" #3.12
+USE_CACHAING: Final[bool] = True
+
+#============================ PATHS ============================#
 
 DATA_PATH: Final[Path] = Path(os.getcwd()).parent.absolute()
 MODELS_TRAINING_FOLDER: Final[str] = os.path.join(DATA_PATH, 'Models')

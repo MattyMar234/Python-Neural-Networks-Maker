@@ -41,13 +41,20 @@ class PermanentCrops_DataModule(DataModuleBase):
     
     _SINGLETON_INSTANCE = None
     _ONE_HOT: Final[bool] = True
-    _USE_CACHING:  Final[bool] = True
+
     
     MAP_COLORS: Dict[int, str] = {
         0 : "#3c3c3c",
         1 : "#ff0000",
         2 : "#00ff00",
         3 : "#0000ff"
+    }
+    
+    COLOR_LABEL_MAP : Dict[int, str] = {
+        0 : "unknow",
+        1 : "w",
+        2 : "a",
+        3 : "c"
     }
     
 
@@ -142,7 +149,7 @@ class PermanentCrops_DataModule(DataModuleBase):
             
         filePath = os.path.join(Globals.TEMP_DATA,f"{self.__class__.__name__}", "classes_weight.pickle")
         
-        if PermanentCrops_DataModule._USE_CACHING and os.path.exists(filePath):
+        if Globals.USE_CACHAING and os.path.exists(filePath):
             with open(filePath, "rb") as f:
                 return pickle.load(f)
             
@@ -202,7 +209,7 @@ class PermanentCrops_DataModule(DataModuleBase):
         self._TRAINING.setLoadOnlyY(False)
         
         
-        if PermanentCrops_DataModule._USE_CACHING:
+        if Globals.USE_CACHAING:
             folder = os.path.dirname(filePath)
             if not os.path.exists(folder):
                 os.makedirs(folder)
@@ -231,19 +238,19 @@ class PermanentCrops_DataModule(DataModuleBase):
                 
                 x = data['x']
                 y = data['y']
-                y = y.unsqueeze(0)
-                x = x.to(device)
+                y = y.unsqueeze(0)            #aggiungo la dimensione dela batch
+                x = x.to(device).unsqueeze(0) #aggiungo la dimensione dela batch
                 
-                print(x.shape, y.shape)
+                print(x.shape)
                 
-                y_hat = model(x.unsqueeze(0))
+                y_hat = model(x)
+                
+                print(y_hat)
+                #torch.set_printoptions(profile="full")
                 
                 y_hat_ = torch.argmax(y_hat, dim=1)
                 y_ = torch.argmax(y, dim=1)
                 
-                
-                
-                print(y_hat_.shape, y_.shape)
     
                 y_ = y_.cpu().detach()
                 y_hat_ = y_hat_.cpu().detach()
@@ -271,6 +278,8 @@ class PermanentCrops_DataModule(DataModuleBase):
         print(y_hat.shape, y.shape)
         
         
+        
+        
         x = x.cpu().detach()
         x = x.squeeze(0) # elimino la dimensione della batch
         
@@ -288,10 +297,9 @@ class PermanentCrops_DataModule(DataModuleBase):
             x = x.clamp(0, 255)
             
         
-        y_hat = y_hat.cpu().detach()
+        y_hat = y_hat.cpu().detach().int()
         y = y.cpu().detach()
-        
-        
+    
         #fig, axes = plt.subplots(rowElement, (num_images // rowElement) + (num_images % rowElement != 0) + 3, figsize=(16, 12))  # Griglia verticale per ogni immagine
 
         
@@ -332,18 +340,18 @@ class PermanentCrops_DataModule(DataModuleBase):
         fig2.suptitle("Feature Maps: Label Map and Prediction Map")
         
             # Mappa etichetta `y`
-        axes2[0].imshow(label_map, interpolation='none', cmap=cmap)
+        axes2[0].imshow(label_map, interpolation='none', cmap=cmap, vmin=0, vmax=3)
         axes2[0].set_title("Label Map")
         axes2[0].axis('off')
         
         # Mappa predizione `y_hat`
-        axes2[1].imshow(pred_map, interpolation='none', cmap=cmap)
+        axes2[1].imshow(pred_map, interpolation='none', cmap=cmap, vmin=0, vmax=3)
         axes2[1].set_title("Prediction Map")
         axes2[1].axis('off')
         
-        # Aggiungi legenda accanto alla seconda figura
-        #legend_patches = [mpatches.Patch(color=Munich480_DataModule.MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in self._classesMapping.items()]
-        #fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper right', title="Class Colors")
+        #Aggiungi legenda accanto alla seconda figura
+        legend_patches = [mpatches.Patch(color=PermanentCrops_DataModule.MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in PermanentCrops_DataModule.COLOR_LABEL_MAP.items()]
+        fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper right', title="Class Colors")
 
         fig1.subplots_adjust(right=0.8)
         fig2.subplots_adjust(right=0.7)

@@ -56,7 +56,6 @@ class PermanentCrops(Segmentation_Dataset_Base):
     
     TRAIN_VAL_SPLIT_PERCENTAGE = 0.8
     _PACHES_COUNT_DICT_KEY = "patches"
-    _CACHE_DATA = True
     _CACHE_FOLDER = os.path.join(Globals.TEMP_DATA, f"PermanentCrops_tempData")
     
     def __setstate__(self, state):
@@ -91,11 +90,8 @@ class PermanentCrops(Segmentation_Dataset_Base):
         serialized: bool = False
         totalPaches: int = 0
         
-        if PermanentCrops._CACHE_DATA:
-            if not os.path.exists(PermanentCrops._CACHE_FOLDER):
-                os.makedirs(PermanentCrops._CACHE_FOLDER)
         
-        if PermanentCrops._CACHE_DATA and os.path.exists(file):
+        if Globals.USE_CACHAING and os.path.exists(file):
             Globals.APP_LOGGER.info(f"Loading cached data...")
             with open(file, "rb") as f:
                 self._dataDict = pickle.load(f)
@@ -167,7 +163,11 @@ class PermanentCrops(Segmentation_Dataset_Base):
                 case _:
                     raise Exception(f"Invalid mode {mode}") 
          
-        if PermanentCrops._CACHE_DATA and not serialized:
+        if Globals.USE_CACHAING and not serialized:
+            
+            if not os.path.exists(PermanentCrops._CACHE_FOLDER):
+                os.makedirs(PermanentCrops._CACHE_FOLDER)
+            
             with open(file, "wb") as f:
                 pickle.dump(self._dataDict, f)
             serialized = True
