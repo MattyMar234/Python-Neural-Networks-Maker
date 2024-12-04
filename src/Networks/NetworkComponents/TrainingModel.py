@@ -86,7 +86,7 @@ class TraingBase(LightModelBase):
     
     def _make_sheduler(self, optimizer) -> Dict[str, any]:
         
-        print(f"_make_sheduler optimizer: {optimizer}")
+        #print(f"_make_sheduler optimizer: {optimizer}")
         scheduler: Dict[str, any] = {}
         shedulerType: ShedulerType = ShedulerType(self._kwargs[Globals.SCHEDULER_TYPE])
         scheduler['interval'] = self._kwargs[Globals.SCHEDULER_STEP_TYPE]

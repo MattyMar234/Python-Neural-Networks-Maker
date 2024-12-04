@@ -60,7 +60,11 @@ class ColoredFormatter(logging.Formatter):
 
 def makeSeparetor(ch: str, label: Optional[str] = None) -> str:
     assert len(ch) == 1, "ch must be 1 character long"
-    size = os.get_terminal_size()[0] - 12
+    size = 40
+    try:
+        size = os.get_terminal_size()[0] - 12
+    except:
+        pass
     
     if label is None:
         return size * ch

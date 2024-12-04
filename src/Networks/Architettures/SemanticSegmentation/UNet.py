@@ -48,6 +48,8 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
     
     def calculateLoss(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
         #y_hat = self.__net(x)
+        print(x.dtype, x.shape)
+        print(y.dtype, y.shape)
         y_hat = self.forward(x)
         loss: float = 0.0
     
@@ -63,6 +65,7 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
     def forward(self, x) -> torch.Tensor | None :
         
         skip_connections = []
+        print(x)
 
         for encoder_block in self._EncoderBlocks:
             x = encoder_block(x)
@@ -90,9 +93,10 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
             
             #Eseguo le due convoluzioni 
             x = self._DecoderBlocks[i+1](concat_skip)
-
-        return self._OutputLayer(x)
-
+        x = self._OutputLayer(x)
+        print(x.dtype, x.shape)
+        print(x)
+        return x
 
 class UNET_2D(_UnetBase):
     

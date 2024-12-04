@@ -75,6 +75,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
         self._useTemporalSize: bool = useTemporalSize
         self._mode = mode
         self._dataDict: Dict[str, any] | None = {}
+        self._useNormalizedData = True
         
         Segmentation_Dataset_Base.__init__(
             self, 
@@ -177,7 +178,9 @@ class PermanentCrops(Segmentation_Dataset_Base):
             if key != PermanentCrops._PACHES_COUNT_DICT_KEY:
                 Globals.APP_LOGGER.info(f"{mode} PermanentCrops dataset {key} paches range: {self._dataDict[key]['range']}")
                 
-                
+    
+    def useNormalizedData(self, use: bool):
+        self._useNormalizedData = use          
                 
                 
     def _mapIndex(self, index: int) -> str:
@@ -233,7 +236,8 @@ class PermanentCrops(Segmentation_Dataset_Base):
         return dates
     
     def _normalize_dif_data(self, data: np.array, profile) -> np.array:
-        # return ((data - np.min(data)) / (np.max(data) - np.min(data)) * 255).astype(np.uint8)
+        
+        #return data / 27584
         
         match(profile['dtype']):
             case "uint8":
@@ -248,6 +252,9 @@ class PermanentCrops(Segmentation_Dataset_Base):
             case _ :
                 raise Exception(f"Invalid data type {profile['dtype']}")
             
+        if not self._useNormalizedData:
+            return data
+        # return ((data - np.min(data)) / (np.max(data) - np.min(data)) * 255).astype(np.uint8)
     
     def _load_dif_file(self, filePath:str, normalize: bool = True) -> Dict[str,any]:
         
@@ -317,7 +324,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
         return self._dataDict[PermanentCrops._PACHES_COUNT_DICT_KEY]   
     
     
-    def _getItem(self, idx: int) -> dict[str, any]:
+    def _getItem(self, idx: int) -> Dict[str, any]:
         assert idx >= 0 and idx < self.__len__(), f"Index {idx} out of range"
         
         dictData: Dict[str, any] = self._load_year_sequenze(idx)

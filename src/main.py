@@ -210,9 +210,8 @@ def main() -> None:
     
     
     
-    Globals.APP_LOGGER.info(f"{makeSeparetor('=', '[ DATAMODULE ]')}")
+    Globals.APP_LOGGER.info(f"{makeSeparetor('=', '[ DATAMODULE & MODEL ]')}")
     datamodule: DataModuleBase = DatamoduleFactory.makeDatamodule(datasetName=args.dataset, args=args)
-    Globals.APP_LOGGER.info(f"{makeSeparetor('=', '[ MODULE ]')}")
     NetworkModel: ModelBase = NetArchs.create_instance(args.arch, datamodule=datamodule, **vars(args))
     Globals.APP_LOGGER.info(f"{makeSeparetor('=')}")
 
