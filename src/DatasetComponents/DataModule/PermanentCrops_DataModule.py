@@ -76,10 +76,10 @@ class PermanentCrops_DataModule(DataModuleBase):
     }
     
     COLOR_LABEL_MAP : Dict[int, str] = {
-        0 : "unknow",
-        1 : "w",
-        2 : "a",
-        3 : "c"
+        0 : "Unknow",
+        1 : "Vineyards",
+        2 : "Fruit trees",
+        3 : "Olive groves"
     }
     
 
@@ -152,9 +152,19 @@ class PermanentCrops_DataModule(DataModuleBase):
         if self._setup_done:
             return
         
-        self._TRAINING   = PermanentCrops(args=self._args, folderPath = self._datasetFolder, mode= DatasetMode.TRAINING, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
-        self._VALIDATION = PermanentCrops(args=self._args, folderPath = self._datasetFolder, mode= DatasetMode.VALIDATION, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
-        self._TEST       = PermanentCrops(args=self._args, folderPath = self._datasetFolder, mode= DatasetMode.TEST, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
+        dataSizeParametre = {
+            "width" :  PermanentCrops_DataModule.ImageWidth,
+            "height" : PermanentCrops_DataModule.ImageHeight,
+            "channels" : PermanentCrops_DataModule.ImageChannels,
+            "temporalSize" : PermanentCrops_DataModule.TemporalSize,
+            "classesCount" : PermanentCrops_DataModule.ClassesCount,
+            "useOneHotEncoding" : PermanentCrops_DataModule._ONE_HOT,
+            "useTemporalSize" : self._useTemporalSize
+        }
+        
+        self._TRAINING   = PermanentCrops(args=self._args, dataSize = dataSizeParametre, folderPath = self._datasetFolder, mode= DatasetMode.TRAINING, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
+        self._VALIDATION = PermanentCrops(args=self._args, dataSize = dataSizeParametre, folderPath = self._datasetFolder, mode= DatasetMode.VALIDATION, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
+        self._TEST       = PermanentCrops(args=self._args, dataSize = dataSizeParametre, folderPath = self._datasetFolder, mode= DatasetMode.TEST, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
         self._setup_done = True
         
     def train_dataloader(self) -> DataLoader:
@@ -277,23 +287,19 @@ class PermanentCrops_DataModule(DataModuleBase):
                 x = x.to(device).unsqueeze(0) #aggiungo la dimensione dela batch
                 
                 #x = torch.rand([1, 13, 62, 96, 96]).to(device)
-                
+             
                 y_hat = model(x)
                 
-                # tensor = y_hat.cpu().detach().squeeze(0).numpy()
                 
-                # # Salva il tensore in un unico file organizzato come richiesto
-                # with open("tensor.txt", "w") as f:
-                #     f.write(f"Tensore Shape: {tensor.shape}\n\n")
-                #     for i in range(tensor.shape[1]):  # Itera sulla dimensione delle righe (62)
-                #         f.write(f"Riga {i + 1}:\n")
-                #         for j in range(tensor.shape[0]):  # Itera sulle 13 matrici
-                #             f.write(f"  Matrice {j + 1} (96x96):\n")
-                #             np.savetxt(f, tensor[j, i], fmt="%.8f")
-                #             f.write("\n")  # Aggiungi una riga vuota tra matrici
-                #         f.write("\n")  # Aggiungi una riga vuota tra righe
+                
+                # # tensor = y_hat.cpu().detach().squeeze(0).numpy()
+                # torch.set_printoptions(profile="full")
+                # with open("tensore.txt", "w") as f:
+                #     f.write(str(x))
+                    
                 # print("Tensore salvato in 'tensor.txt'")
-                # return 
+            
+                
                 
                 
                 #torch.set_printoptions(profile="full")
@@ -344,10 +350,10 @@ class PermanentCrops_DataModule(DataModuleBase):
         if X_as_Int:
             x = x.int()
         else:
-            x = ((x * (2**16 - 1)) * 1e-4)
+            #x = ((x * 1e4) / (2**16 - 1))
             x *= 255
             x = x.int()
-            x += 40
+            #x += 40
             x = x.clamp(0, 255)
 
         y_hat = y_hat.cpu().detach().int()

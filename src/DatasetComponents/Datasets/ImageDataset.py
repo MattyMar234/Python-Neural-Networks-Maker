@@ -28,12 +28,10 @@ class Segmentation_Dataset_Base(DatasetBase):
         DatasetBase.__init__(self, classesCount=classesCount, x_transform=x_transform, y_transform = y_transform, oneHot=oneHot, caching = False, args = args)
         
         assert imageSize is not None
-        self.__img_Width = imageSize[0]
-        self.__img_Height = imageSize[1]
-        self.__img_Channels = imageSize[2]
-        
-        if len(imageSize) == 4:
-            self.__img_TimeSequenze = imageSize[3]
+        self._img_Width = imageSize[0]
+        self._img_Height = imageSize[1]
+        self._img_Channels = imageSize[2]
+        self._img_TimeSequenze = imageSize[3]
     
         
         

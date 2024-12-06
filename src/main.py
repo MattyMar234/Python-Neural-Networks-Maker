@@ -148,6 +148,8 @@ def main() -> None:
     # sudo -E python main.py --test --ckpt_path /app/Models/UNET_2D/checkpoints/last.ckpt --idx 2002
     #python main.py --train --arch UNet_3D --dataset=PermanentCrops --datasetPath=/home/super/datasets-nas
     
+    #python main.py --work --arch UNet_3D --dataset=PermanentCrops --datasetPath=/home/super/datasets-nas --lr=1e-4 --sch=stepLR --gamma 1.0 --step_size=1 --step_type=epoch --worker 8 --batch_size 2 --epochs 50 --gpu_or_cpu gpu --gpus 0 1 2 3 --loggerVersion=0 --ckpt_path=/home/mmariani/programmi/Python-Neural-Networks-Maker/Models/UNet_3D-PermanentCrops/checkpoints/last.ckpt --idx=1000
+    
     if '--help' in sys.argv or '-help' in sys.argv or '-h' in sys.argv:
         parser.print_help()
         sys.exit(0)

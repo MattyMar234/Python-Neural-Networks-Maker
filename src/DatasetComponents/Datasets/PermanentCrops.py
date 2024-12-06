@@ -43,16 +43,12 @@ class PermanentCrops(Segmentation_Dataset_Base):
         M20 = "_20m.tif"
         M60 = "_60m.tif"
     
-    TemporalSize: Final[int] = 62
-    ImageChannels: Final[int] = 13
-    ImageWidth: Final[int] = 48*2
-    ImageHeight: Final[int] = 48*2
-    ClassesCount: Final[int] = 4
+    
     
     TRAINIG_E_VALIDATION_TILES: Final[List[str]] = [TileName.SICILIA.value, TileName.PUGLIA.value]
     TEST_TILES: Final[List[str]] = [TileName.SPAGNA.value]
     _DISTANCE_LIST: Final[List[str]] = [Distance.M10.value, Distance.M20.value, Distance.M60.value]
-    _MAP_Y_VALUES = lambda y: 0 if y == 0 else y - 220
+
     
     TRAIN_VAL_SPLIT_PERCENTAGE = 0.8
     _PACHES_COUNT_DICT_KEY = "patches"
@@ -65,7 +61,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
         return {} 
     
     
-    def __init__(self, folderPath:str | None, mode: DatasetMode, transforms, useTemporalSize: bool = False, args: Namespace | None = None):
+    def __init__(self, dataSize: Dict[str, any], folderPath:str | None, mode: DatasetMode, transforms, useTemporalSize: bool = False, args: Namespace | None = None):
         
         assert type(mode) == DatasetMode, "Invalid mode type"
         
@@ -77,10 +73,12 @@ class PermanentCrops(Segmentation_Dataset_Base):
         self._dataDict: Dict[str, any] | None = {}
         self._useNormalizedData = True
         
+ 
+        
         Segmentation_Dataset_Base.__init__(
             self, 
-            imageSize = (PermanentCrops.ImageWidth, PermanentCrops.ImageHeight, PermanentCrops.ImageChannels, PermanentCrops.TemporalSize if not useTemporalSize else 0), 
-            classesCount = PermanentCrops.ClassesCount, 
+            imageSize = (dataSize["width"], dataSize["height"], dataSize["channels"], dataSize["temporalSize"] if dataSize["useTemporalSize"] else 0), 
+            classesCount = dataSize["classesCount"], 
             x_transform=transforms,
             y_transform = transforms,
             oneHot = True,
@@ -236,37 +234,38 @@ class PermanentCrops(Segmentation_Dataset_Base):
         return dates
     
     def _normalize_dif_data(self, data: np.array, profile) -> np.array:
-        
+        return data * 1e-4
         #return data / 27584
         
-        match(profile['dtype']):
-            case "uint8":
-                return data / 255.0
+        # match(profile['dtype']):
+        #     case "uint8":
+        #         return data / 255.0
 
-            case "uint16":
-                return data / 65535.0
+        #     case "uint16":
+        #         return data / 65535.0
             
-            case "uint32":
-                return data / 4294967295.0
+        #     case "uint32":
+        #         return data / 4294967295.0
         
-            case _ :
-                raise Exception(f"Invalid data type {profile['dtype']}")
+        #     case _ :
+        #         raise Exception(f"Invalid data type {profile['dtype']}")
             
-        if not self._useNormalizedData:
-            return data
+        # if not self._useNormalizedData:
+        #     return data
         # return ((data - np.min(data)) / (np.max(data) - np.min(data)) * 255).astype(np.uint8)
     
     def _load_dif_file(self, filePath:str, normalize: bool = True) -> Dict[str,any]:
         
         
         with rasterio.open(filePath) as src:
-            data = src.read()
-            data = data.astype(np.float32)
+            data = src.read().astype(np.float32)
             profile = src.profile
             
         if normalize:
             data = self._normalize_dif_data(data = data, profile = profile)
+        
         return {"data" : data, "profile" : profile}
+    
     
     def get_y_value(self, idx: int) -> Optional[torch.Tensor]:
         assert idx < self.__len__() and idx >= 0, f"Index {idx} out of range"
@@ -282,13 +281,14 @@ class PermanentCrops(Segmentation_Dataset_Base):
         
         return y
     
-    def _load_year_sequenze(self, idx: str) -> dict[str, any]:
+    
+    def _load_time_sequenze(self, idx: str) -> dict[str, any]:
         
         sequenzeFolder:str = self._mapIndex(idx)
-        dates: List[str] = self.get_dates(path=sequenzeFolder, sample_number=PermanentCrops.TemporalSize)
+        dates: List[str] = self.get_dates(path=sequenzeFolder, sample_number=self._img_TimeSequenze)
         profile = None
         
-        x: torch.Tensor = torch.empty((PermanentCrops.TemporalSize, PermanentCrops.ImageChannels, PermanentCrops.ImageHeight, PermanentCrops.ImageWidth), dtype=torch.float32)
+        x: torch.Tensor = torch.empty((self._img_TimeSequenze, self._img_Channels, self._img_Height, self._img_Width), dtype=torch.float32)
 
         # Itera attraverso ogni data per caricare i dati temporali
         for t, date in enumerate(dates):
@@ -306,11 +306,10 @@ class PermanentCrops(Segmentation_Dataset_Base):
                 tensor = torch.from_numpy(data).unsqueeze(0)  
                 
                 if suffix != PermanentCrops.Distance.M10.value:
-                    tensor = F.interpolate(tensor, size=(PermanentCrops.ImageHeight, PermanentCrops.ImageWidth))
+                    tensor = F.interpolate(tensor, size=(self._img_Height, self._img_Width))
                 
                 num_channels = tensor.size(1)
                 
-                # Assegna il tensor ai canali specifici per il timestamp t
                 x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor.squeeze(0)
                 current_channel_index += num_channels  # Aggiorna l'indice dei canali
 
@@ -327,14 +326,14 @@ class PermanentCrops(Segmentation_Dataset_Base):
     def _getItem(self, idx: int) -> Dict[str, any]:
         assert idx >= 0 and idx < self.__len__(), f"Index {idx} out of range"
         
-        dictData: Dict[str, any] = self._load_year_sequenze(idx)
+        dictData: Dict[str, any] = self._load_time_sequenze(idx)
     
         
         x = dictData["x"]
         y = dictData["y"]
                 
         if not self._useTemporalSize:
-            x = x.view(-1, PermanentCrops.ImageHeight, PermanentCrops.ImageWidth)
+            x = x.view(-1, self._img_Height, self._img_Width)
             #x = x.permute(1, 2, 0)
             # x = np.transpose(x, (1, 2, 0))
         else:
@@ -394,8 +393,8 @@ class PermanentCrops(Segmentation_Dataset_Base):
                 xy = self._x_transform(xy)
                 
                 # Separare x e y dopo la trasformazione
-                x = xy[:, :PermanentCrops.TemporalSize, :, :]  # I primi 32 canali vanno a x
-                y = xy[:, PermanentCrops.TemporalSize:, :, :]  # I successivi 27 canali vanno a y
+                x = xy[:, :self._img_TimeSequenze, :, :]  # I primi 32 canali vanno a x
+                y = xy[:, self._img_TimeSequenze:, :, :]  # I successivi 27 canali vanno a y
                 
                 #torch.Size([13, 27, 48, 48]) -> torch.Size([27, 48, 48])
                 #y = y[0, 0, :, :]
@@ -405,8 +404,8 @@ class PermanentCrops(Segmentation_Dataset_Base):
 
                 xy = torch.cat((x, y), dim=0)
                 xy = self._x_transform(xy)
-                x = xy[:PermanentCrops.TemporalSize*PermanentCrops.ImageChannels, :, :]
-                y = xy[PermanentCrops.TemporalSize*PermanentCrops.ImageChannels:, :, :]
+                x = xy[:self._img_TimeSequenze*self._img_Channels, :, :]
+                y = xy[self._img_TimeSequenze*self._img_Channels:, :, :]
                 #y = y[0, :, :]
 
         
