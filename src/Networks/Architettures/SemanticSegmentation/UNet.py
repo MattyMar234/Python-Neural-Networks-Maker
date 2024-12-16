@@ -3,7 +3,11 @@ from scipy.ndimage.filters import maximum_filter1d
 import torch
 import torch.nn as nn
 from torch.nn import Module, Sequential
-
+from scipy.ndimage.filters import maximum_filter1d
+import torch
+import torch.nn as nn
+from torch.nn import Module, Sequential
+from torch.nn import Conv3d, ConvTranspose3d, BatchNorm3d, MaxPool3d, AvgPool1d, Dropout3d
 from DatasetComponents.DataModule.DataModuleBase import DataModuleBase
 import Globals
 from Networks.NetworkComponents.TrainingModel import Semantic_ImageSegmentation_TrainingBase
@@ -17,12 +21,12 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         
-        if kwargs.get('features') is None:
-            self._features = self._FEATURES
-        else:
-            self._features = kwargs['features']
+        # if kwargs.get('features') is None:
+        #     self._features = self._FEATURES
+        # else:
+        #     self._features = kwargs['features']
         
-        
+        self._features = self._FEATURES
         #assert len(self._features) == 4, "The number of features must be 4"
         assert all(i > 0 for i in self._features), "The features must be positive integers"
         
@@ -48,8 +52,6 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
     
     def calculateLoss(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
         #y_hat = self.__net(x)
-        print(x.dtype, x.shape)
-        print(y.dtype, y.shape)
         y_hat = self.forward(x)
         loss: float = 0.0
     
@@ -65,7 +67,6 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
     def forward(self, x) -> torch.Tensor | None :
         
         skip_connections = []
-        print(x)
 
         for encoder_block in self._EncoderBlocks:
             x = encoder_block(x)
@@ -93,10 +94,199 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
             
             #Eseguo le due convoluzioni 
             x = self._DecoderBlocks[i+1](concat_skip)
-        x = self._OutputLayer(x)
-        print(x.dtype, x.shape)
-        print(x)
-        return x
+
+        return self._OutputLayer(x)
+
+class UNet_3D_v2(Semantic_ImageSegmentation_TrainingBase):
+
+    #def __init__(self, depth, in_channels, out_classes, feat_channels=[48, 256, 256, 512, 1024], residual='conv'):
+        # residual: conv for residual input x through 1*1 conv across every layer for downsampling, None for removal of residuals
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        #super(UNet_3D, self).__init__()
+        
+        feat_channels=[48, 256, 256, 512, 1024]
+        residual='conv'
+
+        # Encoder downsamplers
+        self.pool1 = MaxPool3d((2, 2, 2))
+        self.pool2 = MaxPool3d((2, 2, 2))
+        self.pool3 = MaxPool3d((2, 2, 2))
+        self.pool4 = MaxPool3d((2, 2, 2))
+
+        in_channels = self._in_Channel 
+        depth = self._DataInputSize[2]
+        out_classes = self._output_Classes
+
+        # Encoder convolutions
+        self.conv_blk1 = Conv3D_Block2(
+            in_channels, feat_channels[0], residual=residual)
+        self.conv_blk2 = Conv3D_Block2(
+            feat_channels[0], feat_channels[1], residual=residual)
+        self.conv_blk3 = Conv3D_Block2(
+            feat_channels[1], feat_channels[2], residual=residual)
+        self.conv_blk4 = Conv3D_Block2(
+            feat_channels[2], feat_channels[3], residual=residual)
+        self.conv_blk5 = Conv3D_Block2(
+            feat_channels[3], feat_channels[4], residual=residual)
+
+        # Decoder convolutions
+        self.dec_conv_blk4 = Conv3D_Block2(
+            2 * feat_channels[3], feat_channels[3], residual=residual)
+        self.dec_conv_blk3 = Conv3D_Block2(
+            2 * feat_channels[2], feat_channels[2], residual=residual)
+        self.dec_conv_blk2 = Conv3D_Block2(
+            2 * feat_channels[1], feat_channels[1], residual=residual)
+        self.dec_conv_blk1 = Conv3D_Block2(
+            2 * feat_channels[0], feat_channels[0], residual=residual)
+
+        # Decoder upsamplers
+        self.deconv_blk4 = Deconv3D_Block2(feat_channels[4], feat_channels[3])
+        self.deconv_blk3 = Deconv3D_Block2(feat_channels[3], feat_channels[2])
+        self.deconv_blk2 = Deconv3D_Block2(feat_channels[2], feat_channels[1])
+        self.deconv_blk1 = Deconv3D_Block2(feat_channels[1], feat_channels[0])
+
+        # Final 1*1 Conv Segmentation map
+        self.one_conv = Conv3d(
+            feat_channels[0], 1, kernel_size=1, stride=1, padding=0, bias=True)
+
+        self.final_conv = torch.nn.Conv2d(depth, out_classes, kernel_size=1, stride=1, padding=0, bias=True)
+
+        # Activation function
+        self.sigmoid = nn.Sigmoid()
+
+    def configure_lossFunction(self) -> nn.Module:
+        
+        if self._output_Classes == 1:
+            return nn.BCELoss()
+        else:
+            Globals.APP_LOGGER.info(f"CrossEntropyLoss parametre:")
+            Globals.APP_LOGGER.info(f"ignoreIndexFromLoss: {self._datamodule.getIgnoreIndexFromLoss}")
+            Globals.APP_LOGGER.info(f"getWeights: {self._datamodule.getWeights}")
+            
+            # Ignora i pixel con classe "ignoreIndexFromLoss"
+            return nn.CrossEntropyLoss(weight=self._datamodule.getWeights, ignore_index=self._datamodule.getIgnoreIndexFromLoss)
+    
+    
+    def calculateLoss(self, x: torch.Tensor, y: torch.Tensor, batch_idx: int):
+        #y_hat = self.__net(x)
+        y_hat = self.forward(x)
+        loss: float = 0.0
+    
+        if self._datamodule.getIgnoreIndexFromLoss >= 0 and self._datamodule.use_oneHot_encoding:
+            y = y.argmax(dim=1)
+            loss = self._lossFunction(y_hat, y)
+        else:
+            loss = self._lossFunction(y_hat, y.squeeze(1))
+            
+        return {"loss": loss, "y_hat": y_hat}
+
+    def forward(self, x):
+        # Encoder part
+
+        print(x.shape)
+
+        x1 = self.conv_blk1(x)
+
+        x_low1 = self.pool1(x1)
+        x2 = self.conv_blk2(x_low1)
+
+        x_low2 = self.pool2(x2)
+        x3 = self.conv_blk3(x_low2)
+
+        x_low3 = self.pool3(x3)
+        x4 = self.conv_blk4(x_low3)
+
+        x_low4 = self.pool4(x4)
+        base = self.conv_blk5(x_low4)
+        r = self.deconv_blk4(base)
+        # Decoder part
+        print(x4.shape, r.shape)
+        
+        d4 = torch.cat([r, x4], dim=1)
+        d_high4 = self.dec_conv_blk4(d4)
+
+        test2 = self.deconv_blk3(d_high4)
+
+        d3 = torch.cat([test2, x3], dim=1)
+        d_high3 = self.dec_conv_blk3(d3)
+        d_high3 = Dropout3d(p=0.5)(d_high3)
+
+        # print(x4.shape, x3.shape, x2.shape, x1.shape)
+
+        d2 = torch.cat([self.deconv_blk2(d_high3), x2], dim=1)
+        d_high2 = self.dec_conv_blk2(d2)
+        d_high2 = Dropout3d(p=0.5)(d_high2)
+
+        d1 = torch.cat([self.deconv_blk1(d_high2), x1], dim=1)
+        d_high1 = self.dec_conv_blk1(d1)
+
+        conv_out = self.one_conv(d_high1)
+        conv_out = conv_out.squeeze(1)
+        out = self.final_conv(conv_out)
+        # seg = self.sigmoid(out)
+        return out
+
+class Deconv3D_Block2(Module):
+
+    def __init__(self, inp_feat, out_feat, kernel=3, stride=2, padding=1):
+        super(Deconv3D_Block2, self).__init__()
+
+        self.deconv = Sequential(
+            ConvTranspose3d(inp_feat, out_feat, kernel_size=(kernel, kernel, kernel),
+                            stride=(stride, stride, stride), padding=(padding, padding, padding), output_padding=1, bias=True),
+            nn.ReLU())
+
+    def forward(self, x):
+        return self.deconv(x)
+
+class Conv3D_Block2(Module):
+
+    def __init__(self, inp_feat, out_feat, kernel=3, stride=1, padding=1, residual=None):
+
+        super(Conv3D_Block2, self).__init__()
+
+        self.conv1 = Sequential(
+            Conv3d(inp_feat, out_feat, kernel_size=kernel,
+                   stride=stride, padding=padding, bias=True),
+            BatchNorm3d(out_feat),
+            nn.ReLU())
+
+        self.conv2 = Sequential(
+            Conv3d(out_feat, out_feat, kernel_size=kernel,
+                   stride=stride, padding=padding, bias=True),
+            BatchNorm3d(out_feat),
+            nn.ReLU())
+
+        self.residual = residual
+
+        if self.residual is not None:
+            self.residual_upsampler = Conv3d(
+                inp_feat, out_feat, kernel_size=1, bias=False)
+
+    def forward(self, x):
+        res = x
+
+        if not self.residual:
+            return self.conv2(self.conv1(x))
+        else:
+            return self.conv2(self.conv1(x)) + self.residual_upsampler(res)
+
+class ChannelPool3d(AvgPool1d):
+
+    def __init__(self, kernel_size, stride, padding):
+        super(ChannelPool3d, self).__init__(kernel_size, stride, padding)
+        self.pool_1d = AvgPool1d(
+            self.kernel_size, self.stride, self.padding, self.ceil_mode)
+
+    def forward(self, inp):
+        n, c, d, w, h = inp.size()
+        inp = inp.view(n, c, d * w * h).permute(0, 2, 1)
+        c = int(c / self.kernel_size[0])
+        return inp.view(n, c, d, w, h)
+
+
 
 class UNET_2D(_UnetBase):
     

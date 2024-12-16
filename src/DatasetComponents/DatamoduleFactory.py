@@ -55,6 +55,7 @@ def makeDatamodule(datasetName: str, args: Namespace) -> DatasetBase:
                 datasetFolder = os.path.join(Globals.DATASET_FOLDER, "permanent_crops", "dataset96"),
                 batch_size=args.batch_size,
                 num_workers=args.workers,
+                useTemporalSize = True,
                 args = args
             )
             

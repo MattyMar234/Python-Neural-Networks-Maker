@@ -30,6 +30,21 @@ import os
 import time
 
 #https://content.satimagingcorp.com/media2/filer_public_thumbnails/filer_public/44/9c/449caa01-64b9-417f-9547-964b66465554/cms_page_media1530image001.png__525.0x426.0_q85_subsampling-2.jpg
+# class BandeIndex(Enum):
+#     BAND_1_AEROSOL: int = 10
+#     BAND_2_RED: int = 0
+#     BAND_3_GREEN: int = 1
+#     BAND_4_BLUE: int = 2
+#     BAND_5_VRE1: int = 4
+#     BAND_6_VRE2: int = 5
+#     BAND_7_VRE3: int = 6
+#     BAND_8_NIR: int = 3
+#     BAND_A8: int = 7
+#     BAND_9_WV: int = 11
+#     BAND_10_SWIR: int = 12
+#     BAND_11_SWIR1: int = 8
+#     BAND_12_SWIR2: int = 9
+    
 class BandeIndex(Enum):
     BAND_1_AEROSOL: int = 10
     BAND_2_RED: int = 0
@@ -41,7 +56,7 @@ class BandeIndex(Enum):
     BAND_8_NIR: int = 3
     BAND_A8: int = 7
     BAND_9_WV: int = 11
-    BAND_10_SWIR: int = 12
+    #BAND_10_SWIR: int = 12
     BAND_11_SWIR1: int = 8
     BAND_12_SWIR2: int = 9
     
@@ -56,8 +71,8 @@ class BandeIndex(Enum):
 
 class PermanentCrops_DataModule(DataModuleBase):
     
-    TemporalSize: Final[int] = 62
-    ImageChannels: Final[int] = 13
+    TemporalSize: Final[int] = 32#62
+    ImageChannels: Final[int] = 12
     ImageWidth: Final[int] = 48*2
     ImageHeight: Final[int] = 48*2
     ClassesCount: Final[int] = 4
@@ -66,7 +81,6 @@ class PermanentCrops_DataModule(DataModuleBase):
     _ONE_HOT: Final[bool] = True
     
     
-
     
     MAP_COLORS: Dict[int, str] = {
         0 : "#3c3c3c",
@@ -114,6 +128,8 @@ class PermanentCrops_DataModule(DataModuleBase):
         self._setup_done = False
         self._useTemporalSize = useTemporalSize
         
+
+        
         self._training_trasforms = transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
@@ -135,7 +151,10 @@ class PermanentCrops_DataModule(DataModuleBase):
     
     @property
     def input_channels(self) -> int:
-        return PermanentCrops_DataModule.ImageChannels
+        if self._useTemporalSize:
+            return PermanentCrops_DataModule.ImageChannels
+        else:
+            return PermanentCrops_DataModule.ImageChannels*PermanentCrops_DataModule.TemporalSize
     
     @property
     def output_classes(self) -> int:
@@ -146,7 +165,11 @@ class PermanentCrops_DataModule(DataModuleBase):
         if self._useTemporalSize:
             return [1, PermanentCrops_DataModule.ImageChannels, PermanentCrops_DataModule.TemporalSize, PermanentCrops_DataModule.ImageHeight, PermanentCrops_DataModule.ImageWidth]
         else: 
-            return [1, PermanentCrops_DataModule.ImageChannels, PermanentCrops_DataModule.ImageHeight, PermanentCrops_DataModule.ImageWidth]
+            return [1, PermanentCrops_DataModule.ImageChannels*PermanentCrops_DataModule.TemporalSize, PermanentCrops_DataModule.ImageHeight, PermanentCrops_DataModule.ImageWidth]
+    
+    # @property 
+    # def getIgnoreIndexFromLoss(self) -> int:
+    #     return 0
         
     def setup(self, stage=None) -> None:
         if self._setup_done:
@@ -165,6 +188,7 @@ class PermanentCrops_DataModule(DataModuleBase):
         self._TRAINING   = PermanentCrops(args=self._args, dataSize = dataSizeParametre, folderPath = self._datasetFolder, mode= DatasetMode.TRAINING, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
         self._VALIDATION = PermanentCrops(args=self._args, dataSize = dataSizeParametre, folderPath = self._datasetFolder, mode= DatasetMode.VALIDATION, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
         self._TEST       = PermanentCrops(args=self._args, dataSize = dataSizeParametre, folderPath = self._datasetFolder, mode= DatasetMode.TEST, transforms=self._test_trasforms, useTemporalSize=self._useTemporalSize)
+        
         self._setup_done = True
         
     def train_dataloader(self) -> DataLoader:
@@ -268,11 +292,7 @@ class PermanentCrops_DataModule(DataModuleBase):
             
     def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
         
-        
-        model.to(device)
-        model.eval()
-        
-        
+    
         idx = kwargs["idx"]
         confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 4, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
         if idx >= 0:
@@ -286,11 +306,17 @@ class PermanentCrops_DataModule(DataModuleBase):
                 y = y.unsqueeze(0)            #aggiungo la dimensione dela batch
                 x = x.to(device).unsqueeze(0) #aggiungo la dimensione dela batch
                 
-                #x = torch.rand([1, 13, 62, 96, 96]).to(device)
+                #x = torch.rand(x.shape).to(device)
              
-                y_hat = model(x)
+                y_hat = model.forward(x)
                 
                 
+                # torch.set_printoptions(profile="full")
+                with open(os.path.join(Globals.TEMP_DATA, "tensore_y_hat.txt"), "w") as f:
+                    f.write(str(y_hat))
+                    
+                # with open(os.path.join(Globals.TEMP_DATA, "tensore_x_hat.txt"), "w") as f:
+                #     f.write(str(x))
                 
                 # # tensor = y_hat.cpu().detach().squeeze(0).numpy()
                 # torch.set_printoptions(profile="full")
@@ -305,6 +331,10 @@ class PermanentCrops_DataModule(DataModuleBase):
                 #torch.set_printoptions(profile="full")
                 
                 y_hat_ = torch.argmax(y_hat, dim=1)
+                
+                # with open(os.path.join(Globals.TEMP_DATA, "tensore_y_hat_argmax.txt"), "w") as f:
+                #     f.write(str(y_hat_))
+                
                 y_ = torch.argmax(y, dim=1)
                 
     
@@ -316,7 +346,7 @@ class PermanentCrops_DataModule(DataModuleBase):
                 
                 confMatrix.reset()
             
-                self.show_processed_sample(x, y_hat_, y_, idx, graphData)
+                self.show_processed_sample(x, y_hat_, y_, idx, graphData, temporalSequenze=self._useTemporalSize)
             return
         
         
@@ -361,7 +391,7 @@ class PermanentCrops_DataModule(DataModuleBase):
 
         
         rowElement: int = 8
-        num_images: int = int(x.shape[0] // 13)  # Number of images in batch
+        num_images: int = int(x.shape[0] // PermanentCrops_DataModule.ImageChannels)  # Number of images in batch
         num_cols: int = (num_images // rowElement) + (num_images % rowElement != 0)
 
         # Additional Windows for Other Bands
@@ -387,7 +417,7 @@ class PermanentCrops_DataModule(DataModuleBase):
                 row: int = idx % rowElement
                 col: int = idx // rowElement
 
-                multiChannelImage = x[idx * 13:(idx + 1) * 13, :, :]
+                multiChannelImage = x[idx * PermanentCrops_DataModule.ImageChannels:(idx + 1) * PermanentCrops_DataModule.ImageChannels, :, :]
                 band_images = [multiChannelImage[b] for b in band_indices]
 
                 composite_image = torch.stack(band_images, dim=0).permute(1, 2, 0).numpy()
@@ -407,7 +437,7 @@ class PermanentCrops_DataModule(DataModuleBase):
             row: int = idx % rowElement
             col: int = idx // rowElement
 
-            multiChannelImage = x[idx * 13:(idx + 1) * 13, :, :]
+            multiChannelImage = x[idx * PermanentCrops_DataModule.ImageChannels:(idx + 1) * PermanentCrops_DataModule.ImageChannels, :, :]
             composite_image = multiChannelImage.permute(1, 2, 0).numpy()
 
             vegetation_index = (composite_image[:, :, BandeIndex.BAND_8_NIR.value] - composite_image[:, :, BandeIndex.BAND_4_BLUE.value]) / (composite_image[:, :, BandeIndex.BAND_8_NIR.value] + composite_image[:, :, BandeIndex.BAND_4_BLUE.value])
@@ -428,7 +458,7 @@ class PermanentCrops_DataModule(DataModuleBase):
             row: int = idx % rowElement
             col: int = idx // rowElement
 
-            multiChannelImage = x[idx * 13:(idx + 1) * 13, :, :]
+            multiChannelImage = x[idx * PermanentCrops_DataModule.ImageChannels:(idx + 1) * PermanentCrops_DataModule.ImageChannels, :, :]
             composite_image = multiChannelImage.permute(1, 2, 0).numpy()
 
             moisture_index = (composite_image[:, :, BandeIndex.BAND_A8.value] - composite_image[:, :, BandeIndex.BAND_11_SWIR1.value]) / (composite_image[:, :, BandeIndex.BAND_A8.value] + composite_image[:, :, BandeIndex.BAND_11_SWIR1.value])
