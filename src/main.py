@@ -227,6 +227,15 @@ def main() -> None:
         testModel(args=args, device= device, datamodule = datamodule, model= NetworkModel)
 
     if args.work:
+        if argsAsDict["ckpt_path"] is not None and argsAsDict["ckpt_path"] != "":
+            checkpoint = torch.load(argsAsDict["ckpt_path"], map_location=torch.device(device), weights_only=True)
+            #print(checkpoint)
+            NetworkModel.load_state_dict(checkpoint["state_dict"], strict=False)
+            Globals.APP_LOGGER.info(f"Model loaded from checkpoint: {argsAsDict['ckpt_path']}")
+        
+        NetworkModel.to(device)
+        NetworkModel.eval()
+        
         datamodule.on_work(model= NetworkModel, device= device, **vars(args))
 
 if __name__ == "__main__":

@@ -112,7 +112,7 @@ class NetworkManager:
             monitor=TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME,  # La metrica da monitorare
             dirpath=os.path.join(self._workingFolder, 'checkpoints'),  # Sottocartella per i checkpoint
             filename='{epoch}-{' + f'{TraingBase.AVG_VALIDATION_LOSS_LABEL_NAME}'+':.8f}',  # Nome del file
-            save_top_k=3,  # Salva i migliori 3 checkpoint
+            save_top_k=2,  # Salva i migliori 3 checkpoint
             mode='min',  # Se la metrica deve essere minimizzata
             every_n_epochs=1,
             save_last=True,

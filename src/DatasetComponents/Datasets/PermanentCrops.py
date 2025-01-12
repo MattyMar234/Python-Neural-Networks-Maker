@@ -77,7 +77,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
         
         Segmentation_Dataset_Base.__init__(
             self, 
-            imageSize = (dataSize["width"], dataSize["height"], dataSize["channels"], dataSize["temporalSize"] if dataSize["useTemporalSize"] else 0), 
+            imageSize = (dataSize["width"], dataSize["height"], dataSize["channels"], dataSize["temporalSize"]), 
             classesCount = dataSize["classesCount"], 
             x_transform=transforms,
             y_transform = transforms,
@@ -282,17 +282,52 @@ class PermanentCrops(Segmentation_Dataset_Base):
         return y
     
     
-    def _load_time_sequenze(self, idx: str) -> dict[str, any]:
+    # def _load_time_sequenze(self, idx: str) -> dict[str, any]:
         
-        sequenzeFolder:str = self._mapIndex(idx)
+    #     sequenzeFolder:str = self._mapIndex(idx)
+    #     dates: List[str] = self.get_dates(path=sequenzeFolder, sample_number=self._img_TimeSequenze)
+    #     profile = None
+        
+    #     x: torch.Tensor = torch.empty((self._img_TimeSequenze, self._img_Channels, self._img_Height, self._img_Width), dtype=torch.float32)
+
+    #     # Itera attraverso ogni data per caricare i dati temporali
+    #     for t, date in enumerate(dates):
+    #         current_channel_index = 0  # Reset per ogni t-step
+
+    #         # Carica i dati per ciascuna distanza selezionata
+    #         for suffix in PermanentCrops._DISTANCE_LIST:
+    #             DataDict = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}{suffix}"))
+    #             data = DataDict['data']
+                
+    #             if profile is None:
+    #                 profile = DataDict["profile"]
+                
+    #             # Aggiungi dimensione per l'interpolazione
+    #             tensor = torch.from_numpy(data).unsqueeze(0)  
+                
+    #             if suffix != PermanentCrops.Distance.M10.value:
+    #                 tensor = F.interpolate(tensor, size=(self._img_Height, self._img_Width))
+                
+    #             num_channels = tensor.size(1)
+                
+    #             x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor.squeeze(0)
+    #             current_channel_index += num_channels  # Aggiorna l'indice dei canali
+
+    #     # Carica la maschera di segmentazione
+    #     y = self._load_y(sequenzeFolder)
+    #     return {"x": x, "y": y, "profile": profile}
+    
+    def _load_time_sequenze(self, idx: str) -> dict[str, any]:
+        sequenzeFolder: str = self._mapIndex(idx)
         dates: List[str] = self.get_dates(path=sequenzeFolder, sample_number=self._img_TimeSequenze)
         profile = None
-        
-        x: torch.Tensor = torch.empty((self._img_TimeSequenze, self._img_Channels, self._img_Height, self._img_Width), dtype=torch.float32)
+
+        x_list = []  # Lista per accumulare i tensori
 
         # Itera attraverso ogni data per caricare i dati temporali
         for t, date in enumerate(dates):
-            current_channel_index = 0  # Reset per ogni t-step
+            # Lista per accumulare i tensori di questo t-step
+            time_step_tensors = []
 
             # Carica i dati per ciascuna distanza selezionata
             for suffix in PermanentCrops._DISTANCE_LIST:
@@ -308,19 +343,25 @@ class PermanentCrops(Segmentation_Dataset_Base):
                 if suffix != PermanentCrops.Distance.M10.value:
                     tensor = F.interpolate(tensor, size=(self._img_Height, self._img_Width))
                 
-                num_channels = tensor.size(1)
-                
-                x[t, current_channel_index:current_channel_index + num_channels, :, :] = tensor.squeeze(0)
-                current_channel_index += num_channels  # Aggiorna l'indice dei canali
+                time_step_tensors.append(tensor.squeeze(0))  # Rimuove la dimensione superflua dopo l'interpolazione
+            # Concatena i tensori del t-step lungo la dimensione dei canali
+            x_t = torch.cat(time_step_tensors, dim=0)
+            x_list.append(x_t)
 
+        # Concatena tutti i t-step lungo la dimensione temporale
+        x = torch.stack(x_list, dim=0)
+        
+        #print(x.shape)
+        
+        
         # Carica la maschera di segmentazione
         y = self._load_y(sequenzeFolder)
         return {"x": x, "y": y, "profile": profile}
     
     
-    
     def _getSize(self) -> int:
-        return self._dataDict[PermanentCrops._PACHES_COUNT_DICT_KEY]   
+        return 16
+        #return self._dataDict[PermanentCrops._PACHES_COUNT_DICT_KEY]   
     
     
     def _getItem(self, idx: int) -> Dict[str, any]:
@@ -384,7 +425,7 @@ class PermanentCrops(Segmentation_Dataset_Base):
                 y = y.unsqueeze(0)
                 
                 #torch.Size([1, 27, 48, 48]) -> torch.Size([13, 27, 48, 48])
-                y = y.repeat(13, 1, 1, 1)
+                y = y.repeat(self._img_Channels, 1, 1, 1)
                 
                 
                 #torch.Size([13, 32, 48, 48]) ° torch.Size([13, 27, 48, 48])
