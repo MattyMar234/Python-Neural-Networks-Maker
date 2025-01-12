@@ -322,6 +322,69 @@ class Munich480_DataModule(DataModuleBase):
     def on_work(self, model: ModelBase, device: torch.device, **kwargs) -> None:
         self.setup()
         
+        # self._TRAIN1 = Munich480(args=self._args, folderPath = self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= Munich480.Year.Y2016, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
+        # self._TRAIN2 = Munich480(args=self._args, folderPath = self._datasetFolder, mode= Munich480.DatasetMode.TRAINING, year= Munich480.Year.Y2016, transforms=self._training_trasforms, useTemporalSize=self._useTemporalSize)
+        
+        
+        # self._TRAIN1.setLoadOnlyY(True)
+        # self._TRAIN2.setLoadOnlyY(True)
+        
+        # self._TRAIN3 = torch.utils.data.ConcatDataset([self._TRAIN1, self._TRAIN2])
+        
+        # train_loader = DataLoader(
+        #     self._TRAIN, 
+        #     batch_size=self._batch_size, 
+        #     num_workers=self._num_workers, 
+        #     shuffle=True, 
+        #     pin_memory=self._pin_memory, 
+        #     persistent_workers=self._persistent_workers, 
+        #     drop_last=True, 
+        #     prefetch_factor=self._prefetch_factor
+        # )
+        
+        # num_classes = 27
+        # label_counts = np.zeros(num_classes, dtype=int)
+
+
+        # print("lading data")
+        # # Itera su tutti gli elementi del dataset
+        
+        # class_counts: torch.Tensor = torch.zeros(self.output_classes)
+        
+        # for idx, (_, y) in enumerate(train_loader):
+        #     print(f"Loading: {min(idx + 1, len(train_loader))}/{len(train_loader)}", end="\r")
+            
+        #     #print(y.shape)
+        #     y = torch.argmax(y, dim=1)
+        #     # print(y.shape)
+        #     # print(y)
+        #     y_flat = y.flatten()
+        #     class_counts += torch.bincount(y_flat, minlength=self.output_classes)
+            
+            
+    
+
+        # availableClass = []
+        # value = []
+        
+        # for i in range(num_classes):
+        #     if i in self._classesMapping:
+        #         availableClass.append(i)
+        #         value.append(class_counts[i])
+
+        # # Grafico a barre per la distribuzione delle etichette
+        # plt.figure(figsize=(10, 6))
+        # plt.bar(range(len(availableClass)), value, color='orange')
+        # plt.xlabel('Crop classes')
+        # plt.ylabel('Labels count')
+        # #plt.title('Label Distribution per Class')
+        # plt.xticks(range(len(availableClass)), labels=[f'{self.map_classes(i)}' for i in availableClass], rotation=45)
+        # plt.grid(axis='y')
+        # plt.tight_layout()
+        # plt.show()
+        
+        # return
+        
         # table: TableBase = TensorTable("munich")
         
         # databaseParametre = DatabaseParametre(
