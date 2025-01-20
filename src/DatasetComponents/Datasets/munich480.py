@@ -152,6 +152,8 @@ class Munich480(Segmentation_Dataset_Base):
         self._yearsSequenze = years_sequenze
       
     
+    
+    
     def _generateTableName(self):
         className: str = self.__class__.__name__.lower()
         
@@ -418,7 +420,19 @@ class Munich480(Segmentation_Dataset_Base):
         y = items['y']
         items['y'] = y.long()
         return items
-            
+    
+    
+    def get_dataset_image(self, idx: int, date: str) -> Dict[str, any]:
+        assert idx >= 0 and idx < self.__len__(), f"Index {idx} out of range"
+        sequenzeFolder = self._mapIndex(idx)    
+        
+        DataDict = self._load_dif_file(os.path.join(sequenzeFolder, f"{date}_10m.tif"))
+        return DataDict
+    
+    # def get_dataset_image(self, year: str, idx: int, date: str) -> Dict[str, any]:
+    #     DataDict = self._load_dif_file(os.path.join(self._folderPath,year,f'{idx}', f"{date}_10m.tif"))
+    #     return DataDict
+        
         
     def show_sample(self, sample) -> None:
         # Assumiamo che `sample` abbia la forma [C, H, W]

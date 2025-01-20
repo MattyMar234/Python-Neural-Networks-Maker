@@ -34,9 +34,9 @@ import time
 
 class BandeIndex(Enum):
     BAND_1_AEROSOL: int = 10
-    BAND_2_RED: int = 0
+    BAND_2_BLUE: int = 2
     BAND_3_GREEN: int = 1
-    BAND_4_BLUE: int = 2
+    BAND_4_RED: int = 0
     BAND_5_VRE1: int = 4
     BAND_6_VRE2: int = 5
     BAND_7_VRE3: int = 6
@@ -473,50 +473,109 @@ class Munich480_DataModule(DataModuleBase):
             )
             
             creator_x:TIF_Creator = TIF_Creator('/app/geoData/x')
+            creator_x_v2:TIF_Creator = TIF_Creator('/app/geoData/x_v2')
             creator_y:TIF_Creator = TIF_Creator('/app/geoData/y')
             creator_y_hat:TIF_Creator = TIF_Creator('/app/geoData/y_hat')
-            loaders = [temp_loader1, temp_loader2, temp_loader3]
-            idx = 0
+            #loaders = [temp_loader1, temp_loader2, temp_loader3]
+            loaders = [temp_loader1]
+            
+            number = 240
+            
+            for i in range(len(temp_loader1)):
+                print(f"Processing {i}/{number}", end = '\r')
+                
+                try:
+                    output = temp_loader1.dataset.get_dataset_image(i,"20160212")
+                    image = output["data"]
+                    profile = output["profile"]
+                    
+                    red = image[BandeIndex.BAND_4_RED.value, :, :]
+                    green = image[BandeIndex.BAND_3_GREEN.value, :, :]
+                    blue = image[BandeIndex.BAND_2_BLUE.value, :, :]
+
+                    rgb_image = np.stack([red, green, blue])
+                    rgb_image = ((rgb_image * (2**16 - 1)))
+                    #rgb_image = rgb_image.permute(1, 2, 0)
+                    rgb_image_np = self.adjust_RGB_image(rgb_image)
+                    
+                    creator_x_v2.makeTIF(f'{i}.tif', profile, data =rgb_image_np, channels = 3, width=48, height=48)
+                except Exception as e:
+                    print(e)
+                    pass 
+            print("start merging x_v2...")
+            creator_x_v2.mergeTIFs('/app/merged_x_v2.tif')
+            return
             
             # creator_y_hat.mergeTIFs('/app/merged_y_hat.tif')
             # creator_y.mergeTIFs('/app/merged_y.tif')
-            
+            step = 0
             size = 0
+            T = 3
+            count = 140
             
             for loader in loaders:
                 size += len(loader)
                 
             for k, loader in enumerate(loaders):
                 for n, (x, y) in enumerate(loader):
-                    print(f"Processing {idx}/{size} | [{k}-{n}]", end = '\r')
+                    print(f"Processing {step}/{size} | [{k}-{n}]", end = '\r')
                     with torch.no_grad():
-                        x = x.to(device)
-
-                        y_hat = model(x)
-
-                        y_hat_ = torch.argmax(y_hat, dim=1)
-                        y_ = torch.argmax(y, dim=1)
-
-                        profile = loader.dataset.getItemInfo(n)
-
-                        #profile = self._TEST.getItemInfo(n)
-                        y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
-                        y_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                        #profile = loader.dataset.getItemInfo(n)
+                        #print(x.shape)
+                        #image = x[0, :, T, :, :]
                         
-                        for i in range(48):
-                            for j in range(48):
-                                class_id = int(y_hat_[0, i, j])
-                                y_hat_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+                        output = loader.dataset.get_dataset_image(n,"20160212")
+                        
+                        image = output["data"]
+                        profile = output["profile"]
+                        
+                        #print(image.shape)
+                        
+                        #print(image.shape)
+                        red = image[BandeIndex.BAND_4_RED.value, :, :]
+                        green = image[BandeIndex.BAND_3_GREEN.value, :, :]
+                        blue = image[BandeIndex.BAND_2_BLUE.value, :, :]
 
-                                class_id = int(y_[0, i, j])
-                                y_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+                        #print(red.shape, green.shape, blue.shape)
 
-                    creator_y_hat.makeTIF(f'{idx}.tif', profile, data =y_hat_RGB, channels = 3, width=48, height=48) 
-                    creator_y.makeTIF(f'{idx}.tif', profile, data =y_RGB, channels = 3, width=48, height=48)
+                        rgb_image = np.stack([red, green, blue])
+                        rgb_image = ((rgb_image * (2**16 - 1)))
+                        #rgb_image = rgb_image.permute(1, 2, 0)
+                        rgb_image_np = self.adjust_RGB_image(rgb_image)
+                        
+                        
+
+                        # x = x.to(device)
+                        # y_hat = model(x)
+
+                        # y_hat_ = torch.argmax(y_hat, dim=1)
+                        # y_ = torch.argmax(y, dim=1)
+
+
+                        # #profile = self._TEST.getItemInfo(n)
+                        # y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                        # y_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                        
+                        # for i in range(48):
+                        #     for j in range(48):
+                        #         class_id = int(y_hat_[0, i, j])
+                        #         y_hat_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                        #         class_id = int(y_[0, i, j])
+                        #         y_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                    creator_x.makeTIF(f'{step}.tif', profile, data =rgb_image_np, channels = 3, width=48, height=48)
+                    #creator_y_hat.makeTIF(f'{step}.tif', profile, data =y_hat_RGB, channels = 3, width=48, height=48) 
+                    #creator_y.makeTIF(f'{step}.tif', profile, data =y_RGB, channels = 3, width=48, height=48)
                 
-                    idx += 1
+                    step += 1
+                    
+                    if count >= 0 and step >= count:
+                        break
         
-            print("start merging...")
+            print("start merging x...")
+            creator_x.mergeTIFs('/app/merged_x.tif')
+            # print("start merging y_hat...")
             # creator_y_hat.mergeTIFs('/app/merged_y_hat.tif')
             # creator_y.mergeTIFs('/app/merged_y.tif')
    
@@ -626,6 +685,21 @@ class Munich480_DataModule(DataModuleBase):
         # apply gamma correction using the lookup table
         return cv2.LUT(image, table)
     
+    
+    def adjust_RGB_image(self, rgb_image: np.ndarray | torch.Tensor) -> np.array:
+        
+        if isinstance(rgb_image, torch.Tensor):
+            rgb_image = rgb_image.numpy()
+            
+        rgb_image /= 10000
+        rgb_image *=255
+        #rgb_image = rgb_image.clamp(0.0, 255.0)
+        #rgb_image = rgb_image.int()
+        rgb_image = rgb_image.astype(np.uint8)
+        rgb_image = self.adjust_gamma(rgb_image, 2.20)
+        
+        return rgb_image
+    
     def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = True) -> None:
         assert x is not None, "x is None"
         assert y_hat is not None, "y_hat is None"
@@ -676,7 +750,21 @@ class Munich480_DataModule(DataModuleBase):
         # }
         
         band_combinations = {
-            "True Color (RGB)": [2, 1, 0],
+            "True Color (RGB)": [
+                BandeIndex.BAND_4_RED.value,
+                BandeIndex.BAND_3_GREEN.value, 
+                BandeIndex.BAND_2_BLUE.value
+            ],
+            "Color Infrared" : [
+                BandeIndex.BAND_8_NIR.value,
+                BandeIndex.BAND_4_RED.value,
+                BandeIndex.BAND_3_GREEN.value
+            ],
+            "Short-Wave Infrared" : [
+                BandeIndex.BAND_12_SWIR2.value,
+                BandeIndex.BAND_A8.value,
+                BandeIndex.BAND_4_RED.value
+            ],
             "a" : [3], 
             "b" : [4],
             "c" : [5], 
@@ -703,16 +791,10 @@ class Munich480_DataModule(DataModuleBase):
                 
                 if len(bands) == 3:
                 
-                    red, green, blue = image[bands[2]], image[bands[1]], image[bands[1]]
+                    red, green, blue = image[bands[0]], image[bands[1]], image[bands[2]]
                     rgb_image = torch.stack([red, green, blue], dim=0).permute(1, 2, 0)
 
-                    rgb_image /= 10000
-                    rgb_image *=255
-                    rgb_image = rgb_image.clamp(0.0, 255.0)
-                    rgb_image = rgb_image.int()
-                    rgb_image = rgb_image.numpy()
-                    
-                    rgb_image = self.adjust_gamma(rgb_image.astype(np.uint8), 3)
+                    rgb_image = self.adjust_RGB_image(rgb_image)
                 
                     #x = percentile_stretch(x, lower_percent=2, upper_percent=98)*255
                     #x = torch.tensor(x)
