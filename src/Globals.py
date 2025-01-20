@@ -5,9 +5,12 @@ from typing import Any, Final, List
 from pathlib import Path
 
 
-#=============================== GENErAL ============================#
+#=============================== GENERAL ============================#
 PYTHON_VERSION: Final[float] = float(f"{sys.version_info.major}.{sys.version_info.minor}")#f"{sys.version_info[0]}.{sys.version_info[1]}" #3.12
 USE_CACHAING: Final[bool] = True
+
+USE_WEIGHTS: Final[bool] = "use_weights"
+USE_IGNORE_CLASS: Final[bool] = "use_ignore_class"
 
 #============================ PATHS ============================#
 

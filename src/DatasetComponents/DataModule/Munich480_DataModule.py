@@ -14,6 +14,7 @@ import torch
 import opendatasets
 import colorsys
 import seaborn as sns
+import cv2
 
 from sklearn.utils.class_weight import compute_class_weight
 from Database.DatabaseConnection import PostgresDB
@@ -31,7 +32,20 @@ from torch.utils.data import DataLoader
 import os
 import time
 
-
+class BandeIndex(Enum):
+    BAND_1_AEROSOL: int = 10
+    BAND_2_RED: int = 0
+    BAND_3_GREEN: int = 1
+    BAND_4_BLUE: int = 2
+    BAND_5_VRE1: int = 4
+    BAND_6_VRE2: int = 5
+    BAND_7_VRE3: int = 6
+    BAND_8_NIR: int = 3
+    BAND_A8: int = 7
+    BAND_9_WV: int = 11
+    BAND_10_SWIR: int = 12
+    BAND_11_SWIR1: int = 8
+    BAND_12_SWIR2: int = 9
 
 def _generate_distinct_colors(num_classes: int) -> Dict[int, str]:
     colors = {}
@@ -147,7 +161,10 @@ class Munich480_DataModule(DataModuleBase):
     
     @property 
     def getIgnoreIndexFromLoss(self) -> int:
-        return 0
+        if vars(self._args)[Globals.USE_IGNORE_CLASS]:
+            return 0
+        else:
+            return -100
     
     @property
     def input_channels(self) -> int:
@@ -416,54 +433,12 @@ class Munich480_DataModule(DataModuleBase):
         # #DB.execute_query(table.insertElement_Query(id = idx, x = tensor_binary_x, y = tensor_binary_y, info = profile_binary))
         # q = table.getElementAt_Query(0)
         # print(q)
-
-        
-        
-        
-        
-        
-        
-        confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
-    
-    
-        checkpoint = torch.load(kwargs["ckpt_path"], map_location=torch.device(device))
-        #print(checkpoint)
-        model.load_state_dict(checkpoint["state_dict"], strict=False)
-        model.to(device)
-        model.eval()
-        
         
         idx = kwargs["idx"]
-        
-        if idx >= 0:
-            idx = idx % len(self._TEST)
 
-            with torch.no_grad():  
-                data: Dict[str, any] = self._TEST.getItem(idx)
-                
-                x = data['x']
-                y = data['y']
-                y = y.unsqueeze(0)
-                x = x.to(device)
-                
-                y_hat = model(x.unsqueeze(0))
-                
-                y_hat_ = torch.argmax(y_hat, dim=1)
-                y_ = torch.argmax(y, dim=1)
-                
-                print(y_hat_.shape, y_.shape)
-    
-                y_ = y_.cpu().detach()
-                y_hat_ = y_hat_.cpu().detach()
-                
-                
-                confMatrix.update(y_pr=y_hat_, y_tr=y_)
-                _, graphData = confMatrix.compute(showGraph=False)
-                
-                confMatrix.reset()
-            
-                self.show_processed_sample(x, y_hat_, y_, idx, graphData)
-            return
+        if idx >= 0:
+            #self.noIgnore(model, device, **kwargs)
+            self.with_ignore(model, device, **kwargs)
         
         if idx == -1:
             
@@ -545,7 +520,111 @@ class Munich480_DataModule(DataModuleBase):
             # creator_y_hat.mergeTIFs('/app/merged_y_hat.tif')
             # creator_y.mergeTIFs('/app/merged_y.tif')
    
+    def noIgnore(self, model, device, **kwargs):
+        confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
     
+    
+        checkpoint = torch.load(kwargs["ckpt_path"], map_location=torch.device(device))
+        #print(checkpoint)
+        model.load_state_dict(checkpoint["state_dict"], strict=False)
+        model.to(device)
+        model.eval()
+        
+        idx = kwargs["idx"]
+        idx = idx % len(self._TEST)
+
+        with torch.no_grad():  
+            data: Dict[str, any] = self._TEST.getItem(idx)
+            
+            x = data['x']
+            y = data['y']
+            y = y.unsqueeze(0)
+            x = x.to(device)
+            
+            y_hat = model(x.unsqueeze(0))
+            
+            y_hat_ = torch.argmax(y_hat, dim=1)
+            y_ = torch.argmax(y, dim=1)
+            
+            print(y_hat_.shape, y_.shape)
+
+            y_ = y_.cpu().detach()
+            y_hat_ = y_hat_.cpu().detach()
+            
+            
+            confMatrix.update(y_pr=y_hat_, y_tr=y_)
+            _, graphData = confMatrix.compute(showGraph=False)
+            
+            confMatrix.reset()
+        
+            self.show_processed_sample(x, y_hat_, y_, idx, graphData)
+            
+    def with_ignore(self, model, device, **kwargs):
+        
+        confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
+    
+    
+        checkpoint = torch.load(kwargs["ckpt_path"], map_location=torch.device(device))
+        #print(checkpoint)
+        model.load_state_dict(checkpoint["state_dict"], strict=False)
+        model.to(device)
+        model.eval()
+        
+        idx = kwargs["idx"]
+        idx = idx % len(self._TEST)
+
+        with torch.no_grad():  
+            data: Dict[str, any] = self._TEST.getItem(idx)
+            
+            x = data['x']
+            y = data['y']
+            y = y.unsqueeze(0)
+            x = x.to(device)
+            
+            y_hat = model(x.unsqueeze(0))
+            
+            # y_hat_ = torch.argmax(y_hat, dim=1)
+            # y_ = torch.argmax(y, dim=1)
+            
+            # print(y_hat_.shape, y_.shape)
+
+            # y_ = y_.cpu().detach()
+            # y_hat_ = y_hat_.cpu().detach()
+            
+            
+                # Calcola la probabilità di ogni classe
+            y_hat_probs = torch.softmax(y_hat, dim=1)  # Applicare softmax per ottenere probabilità
+            max_probs, y_hat_ = torch.max(y_hat_probs, dim=1)  # Trova la classe con probabilità massima
+
+            # Calcola la classe di verità
+            y_ = torch.argmax(y, dim=1)
+            
+            # Stampa le forme
+            print(y_hat_.shape, y_.shape)
+            
+            # Verifica la confidenza
+            confidence_threshold = 0.75  # Soglia di confidenza per la classe "sconosciuto"
+            y_hat_ = torch.where(max_probs < confidence_threshold, torch.zeros_like(y_hat_), y_hat_)
+            
+            y_hat_ = y_hat_.cpu().detach()
+            y_ = y_.cpu().detach()
+            
+            confMatrix.update(y_pr=y_hat_, y_tr=y_)
+            _, graphData = confMatrix.compute(showGraph=False)
+            
+            confMatrix.reset()
+        
+            self.show_processed_sample(x, y_hat_, y_, idx, graphData)
+        
+    
+    def adjust_gamma(self, image, gamma=1.0):
+        # build a lookup table mapping the pixel values [0, 255] to
+        # their adjusted gamma values
+        invGamma = 1.0 / gamma
+        table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+        # apply gamma correction using the lookup table
+        return cv2.LUT(image, table)
     
     def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = True) -> None:
         assert x is not None, "x is None"
@@ -563,19 +642,19 @@ class Munich480_DataModule(DataModuleBase):
         x = x.cpu().detach()
         x = x.squeeze(0) # elimino la dimensione della batch
         
+        
         if temporalSequenze:
             x = x.permute(1, 0, 2, 3)
             x = x.reshape(-1, 48, 48)
             
-        if X_as_Int:
-            x = x.int()
-        else :
-            x = ((x * (2**16 - 1))*1e-4)
-            x *= 255
-            x = x.int()
-            x += 40
-            x = x.clamp(0, 255)
             
+            #x = ((x * (2**16 - 1))/10000)
+            # x *= 255
+            # #x += 30
+            # x = x.clamp(0.0, 255.0)
+            # x = x.int()
+            
+        x = ((x * (2**16 - 1)))
         
         y_hat = y_hat.cpu().detach()
         y = y.cpu().detach()
@@ -584,29 +663,115 @@ class Munich480_DataModule(DataModuleBase):
         #fig, axes = plt.subplots(rowElement, (num_images // rowElement) + (num_images % rowElement != 0) + 3, figsize=(16, 12))  # Griglia verticale per ogni immagine
 
         
+        # band_combinations = {
+        #     "True Color (RGB)": [2, 1, 0],
+        #     "False Color (NIR)": [3, 2, 1],
+        #     "False Color Urban": [11, 3, 2],
+        #     "Agriculture": [11, 8, 2],
+        #     "Atmospheric Penetration": [11, 12, 8],
+        #     "Vegetation Analysis": [7, 3, 2],
+        #     "Moisture Index": [8, 11, 12],
+        #     "Natural Color (SWIR)": [3, 2, 11],
+        #     "Geology": [12, 11, 2],
+        # }
+        
+        band_combinations = {
+            "True Color (RGB)": [2, 1, 0],
+            "a" : [3], 
+            "b" : [4],
+            "c" : [5], 
+            "d" : [6],
+            "e" : [7], 
+            "f" : [8],
+            "g" : [9], 
+            "h" : [10],
+            "i" : [11], 
+            "j" : [12],
+        }
+
+        # Define plot layout
+        num_rows = len(band_combinations)
+        num_cols = 32  # One column per image in the sequence
+        fig1, axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 1.2, num_rows * 2))
+        #fig1.suptitle(f"Index {index}: Band Compositions", fontsize=16)
+        fig1.subplots_adjust(wspace=0.1, hspace=0.1)  # Riduci lo spazio tra immagini
+
+        for row_idx, (name, bands) in enumerate(band_combinations.items()):
+            for col_idx in range(num_cols):
+                # Extract image for current sequence and select bands
+                image = x[col_idx * 13:(col_idx + 1) * 13, :, :]
+                
+                if len(bands) == 3:
+                
+                    red, green, blue = image[bands[2]], image[bands[1]], image[bands[1]]
+                    rgb_image = torch.stack([red, green, blue], dim=0).permute(1, 2, 0)
+
+                    rgb_image /= 10000
+                    rgb_image *=255
+                    rgb_image = rgb_image.clamp(0.0, 255.0)
+                    rgb_image = rgb_image.int()
+                    rgb_image = rgb_image.numpy()
+                    
+                    rgb_image = self.adjust_gamma(rgb_image.astype(np.uint8), 3)
+                
+                    #x = percentile_stretch(x, lower_percent=2, upper_percent=98)*255
+                    #x = torch.tensor(x)
+
+                    # Plot on respective axes
+                    ax = axes[row_idx, col_idx]
+                    ax.imshow(rgb_image.astype('uint8'), interpolation='None')
+                    
+                    if col_idx == 0:
+                        ax.set_ylabel(name, fontsize=10)
+                    ax.axis('off')
+                    
+                elif len(bands) == 1:
+                    # Visualizza singola banda
+                    single_band = image[bands[0]].numpy()  # Accedi alla banda specifica
+                    
+                    single_band /= 10000
+                    single_band *= (2**16 - 1)
+                    
+                    ax = axes[row_idx, col_idx]
+                    ax.imshow(single_band.astype('uint16'), cmap='magma', interpolation='none')
+                    
+                    if col_idx == 0:
+                        ax.set_ylabel(name, fontsize=10)
+                    ax.axis('off')
+                                    
+                if row_idx == 0:
+                    ax.set_title(f"t{col_idx+1}", fontsize=8)
+
+        # Add label for the row (band combination name)
+        if col_idx == 0:
+            ax.set_ylabel(name, fontsize=10)
+        
+        ax.text(-10, image.shape[1] // 2, name, va='center', ha='right', fontsize=10, rotation=90)
+        
 
         #=========================================================================#
-        # Prima finestra: Visualizzazione delle immagini RGB
-        rowElement: int = 8
-        num_images: int = int(x.shape[0] // 13)  # Numero di immagini nel batch
-        num_cols: int = (num_images // rowElement) + (num_images % rowElement != 0)
+        # # Prima finestra: Visualizzazione delle immagini RGB
+        # rowElement: int = 8
+        # num_images: int = int(x.shape[0] // 13)  # Numero di immagini nel batch
+        # num_cols: int = (num_images // rowElement) + (num_images % rowElement != 0)
         
-        fig1, axes1 = plt.subplots(rowElement, num_cols, figsize=(10, 12))
-        fig1.suptitle(f"Index {index}")
+        # fig1, axes1 = plt.subplots(rowElement, num_cols, figsize=(10, 12))
+        # fig1.suptitle(f"Index {index}")
+    
         
-        for idx in range(num_images):
-            row: int = idx % rowElement
-            col: int = idx // rowElement
+        # for idx in range(num_images):
+        #     row: int = idx % rowElement
+        #     col: int = idx // rowElement
             
-            # Estrazione dell'immagine (13 canali)
-            image = x[idx * 13:(idx + 1) * 13, :, :]
-            red, green, blue = image[2], image[1], image[0]
-            rgb_image = torch.stack([red, green, blue], dim=0).permute(1, 2, 0).numpy()
+        #     # Estrazione dell'immagine (13 canali)
+        #     image = x[idx * 13:(idx + 1) * 13, :, :]
+        #     red, green, blue = image[2], image[1], image[0]
+        #     rgb_image = torch.stack([red, green, blue], dim=0).permute(1, 2, 0).numpy()
 
-            ax = axes1[row, col]
-            ax.imshow(rgb_image)
-            ax.set_title(f"Image {idx+1}")
-            ax.axis('off')
+        #     ax = axes1[row, col]
+        #     ax.imshow(rgb_image)
+        #     ax.set_title(f"Image {idx+1}")
+            #ax.axis('off')
         
         
         # Crea una colormap personalizzata
@@ -617,7 +782,7 @@ class Munich480_DataModule(DataModuleBase):
         pred_map = y_hat.numpy()      # Predizione con massimo di ciascun layer di `y_hat`
         
         fig2, axes2 = plt.subplots(1, 2, figsize=(10, 5))
-        fig2.suptitle("Feature Maps: Label Map and Prediction Map")
+        fig2.suptitle("Label Map and Prediction Map")
         
             # Mappa etichetta `y`
         axes2[0].imshow(label_map, cmap=cmap)
@@ -636,7 +801,8 @@ class Munich480_DataModule(DataModuleBase):
         fig1.subplots_adjust(right=0.8)
         fig2.subplots_adjust(right=0.7)
         
-        fig1.tight_layout(pad=2.0)
+        #fig1.tight_layout(pad=2.0)
+        plt.tight_layout(pad=2.0, rect=[0, 0, 0, 0])
         
         # fig3, axes3 = plt.subplots(1, 1, figsize=(10, 5))
         # axes3.imshow(confusionMatrix, cmap='hot')

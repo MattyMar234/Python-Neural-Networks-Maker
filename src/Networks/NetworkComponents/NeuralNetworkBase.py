@@ -198,7 +198,7 @@ class Multiple_Conv3D_Block(nn.Module):
             return self.blockComponents(x)
         
 
-class Deconv3D_Block(nn.Module) :
+class Deconv3D_Block(nn.Module):
     
     def __init__(
             self, 

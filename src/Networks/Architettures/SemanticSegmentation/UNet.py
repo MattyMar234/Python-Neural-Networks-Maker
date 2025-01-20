@@ -54,9 +54,11 @@ class _UnetBase(Semantic_ImageSegmentation_TrainingBase):
         #y_hat = self.__net(x)
         y_hat = self.forward(x)
         loss: float = 0.0
-    
-        if self._datamodule.getIgnoreIndexFromLoss >= 0 and self._datamodule.use_oneHot_encoding:
-            y = y.argmax(dim=1)
+        
+        if self._datamodule.use_oneHot_encoding:
+            if self._datamodule.getIgnoreIndexFromLoss >= 0:
+                y = y.argmax(dim=1)
+            y = y.float()
             loss = self._lossFunction(y_hat, y)
         else:
             loss = self._lossFunction(y_hat, y.squeeze(1))

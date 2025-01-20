@@ -127,7 +127,8 @@ def main() -> None:
     except:
         pass
     
-    
+    parser.add_argument(f'--{Globals.USE_WEIGHTS}', action='store_true')
+    parser.add_argument(f'--{Globals.USE_IGNORE_CLASS}', action='store_true')
     parser.add_argument(f'--{Globals.ENABLE_DATABASE}', action='store_true')
     parser.add_argument(f'--{Globals.EXPORT_MODEL}',    action='store_true')
     parser.add_argument('--summary',  action='store_true')
@@ -228,7 +229,7 @@ def main() -> None:
 
     if args.work:
         if argsAsDict["ckpt_path"] is not None and argsAsDict["ckpt_path"] != "":
-            checkpoint = torch.load(argsAsDict["ckpt_path"], map_location=torch.device(device), weights_only=True)
+            checkpoint = torch.load(argsAsDict["ckpt_path"], map_location=torch.device(device), weights_only=False)
             #print(checkpoint)
             NetworkModel.load_state_dict(checkpoint["state_dict"], strict=False)
             Globals.APP_LOGGER.info(f"Model loaded from checkpoint: {argsAsDict['ckpt_path']}")
