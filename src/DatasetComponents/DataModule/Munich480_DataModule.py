@@ -642,38 +642,43 @@ class Munich480_DataModule(DataModuleBase):
             
             y_hat = model(x.unsqueeze(0))
             
-            # y_hat_ = torch.argmax(y_hat, dim=1)
-            # y_ = torch.argmax(y, dim=1)
+            probabilitis = y_hat.detach().clone().detach()
+            probabilitis= probabilitis.cpu().squeeze(0)
             
-            # print(y_hat_.shape, y_.shape)
-
-            # y_ = y_.cpu().detach()
-            # y_hat_ = y_hat_.cpu().detach()
+            probabilitis = torch.softmax(probabilitis,dim=0).numpy()
             
-            
-                # Calcola la probabilità di ogni classe
-            y_hat_probs = torch.softmax(y_hat, dim=1)  # Applicare softmax per ottenere probabilità
-            max_probs, y_hat_ = torch.max(y_hat_probs, dim=1)  # Trova la classe con probabilità massima
-
-            # Calcola la classe di verità
+            y_hat_ = torch.argmax(y_hat, dim=1)
             y_ = torch.argmax(y, dim=1)
             
-            # Stampa le forme
             print(y_hat_.shape, y_.shape)
-            
-            # Verifica la confidenza
-            confidence_threshold = 0.75  # Soglia di confidenza per la classe "sconosciuto"
-            y_hat_ = torch.where(max_probs < confidence_threshold, torch.zeros_like(y_hat_), y_hat_)
-            
-            y_hat_ = y_hat_.cpu().detach()
+
             y_ = y_.cpu().detach()
+            y_hat_ = y_hat_.cpu().detach()
+            
+            
+            #     # Calcola la probabilità di ogni classe
+            # y_hat_probs = torch.softmax(y_hat, dim=1)  # Applicare softmax per ottenere probabilità
+            # max_probs, y_hat_ = torch.max(y_hat_probs, dim=1)  # Trova la classe con probabilità massima
+
+            # # Calcola la classe di verità
+            # y_ = torch.argmax(y, dim=1)
+            
+            # # Stampa le forme
+            # print(y_hat_.shape, y_.shape)
+            
+            # # Verifica la confidenza
+            # confidence_threshold = 0.75  # Soglia di confidenza per la classe "sconosciuto"
+            # y_hat_ = torch.where(max_probs < confidence_threshold, torch.zeros_like(y_hat_), y_hat_)
+            
+            # y_hat_ = y_hat_.cpu().detach()
+            # y_ = y_.cpu().detach()
             
             confMatrix.update(y_pr=y_hat_, y_tr=y_)
             _, graphData = confMatrix.compute(showGraph=False)
             
             confMatrix.reset()
         
-            self.show_processed_sample(x, y_hat_, y_, idx, graphData)
+            self.show_processed_sample(x=x, y_hat=y_hat_, y=y_, classes_probability=None, confusionMatrixData=graphData)
         
     
     def adjust_gamma(self, image, gamma=1.0):
@@ -700,11 +705,14 @@ class Munich480_DataModule(DataModuleBase):
         
         return rgb_image
     
-    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, index: int, confusionMatrixData: Dict[str, any], X_as_Int: bool = False, temporalSequenze = True) -> None:
+    def show_processed_sample(self, x: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor, classes_probability, confusionMatrixData: Dict[str, any], temporalSequenze = True) -> None:
         assert x is not None, "x is None"
         assert y_hat is not None, "y_hat is None"
         assert y is not None, "y is None"
         
+        IgnoreUnknow= True
+        sampleID = 11
+        sample = None
         
         if len(y_hat.shape) == 3:
             y_hat = y_hat.squeeze(0)
@@ -755,26 +763,26 @@ class Munich480_DataModule(DataModuleBase):
                 BandeIndex.BAND_3_GREEN.value, 
                 BandeIndex.BAND_2_BLUE.value
             ],
-            "Color Infrared" : [
-                BandeIndex.BAND_8_NIR.value,
-                BandeIndex.BAND_4_RED.value,
-                BandeIndex.BAND_3_GREEN.value
-            ],
-            "Short-Wave Infrared" : [
-                BandeIndex.BAND_12_SWIR2.value,
-                BandeIndex.BAND_A8.value,
-                BandeIndex.BAND_4_RED.value
-            ],
-            "a" : [3], 
-            "b" : [4],
-            "c" : [5], 
-            "d" : [6],
-            "e" : [7], 
-            "f" : [8],
-            "g" : [9], 
-            "h" : [10],
-            "i" : [11], 
-            "j" : [12],
+            # "Color Infrared" : [
+            #     BandeIndex.BAND_8_NIR.value,
+            #     BandeIndex.BAND_4_RED.value,
+            #     BandeIndex.BAND_3_GREEN.value
+            # ],
+            # "Short-Wave Infrared" : [
+            #     BandeIndex.BAND_12_SWIR2.value,
+            #     BandeIndex.BAND_A8.value,
+            #     BandeIndex.BAND_4_RED.value
+            # ],
+            "a" : [BandeIndex.BAND_5_VRE1.value], 
+            "b" : [BandeIndex.BAND_6_VRE2.value],
+            "c" : [BandeIndex.BAND_7_VRE3.value], 
+            "d" : [BandeIndex.BAND_8_NIR.value],
+            "e" : [BandeIndex.BAND_A8.value], 
+            "f" : [BandeIndex.BAND_9_WV.value],
+            "g" : [BandeIndex.BAND_10_SWIR.value], 
+            "h" : [BandeIndex.BAND_11_SWIR1.value],
+            "i" : [BandeIndex.BAND_12_SWIR2.value], 
+            "j" : [BandeIndex.BAND_1_AEROSOL.value],
         }
 
         # Define plot layout
@@ -803,6 +811,9 @@ class Munich480_DataModule(DataModuleBase):
                     ax = axes[row_idx, col_idx]
                     ax.imshow(rgb_image.astype('uint8'), interpolation='None')
                     
+                    if name == "True Color (RGB)" and (col_idx - 1) == sampleID:
+                        sample = rgb_image.astype('uint8')
+                    
                     if col_idx == 0:
                         ax.set_ylabel(name, fontsize=10)
                     ax.axis('off')
@@ -822,7 +833,7 @@ class Munich480_DataModule(DataModuleBase):
                     ax.axis('off')
                                     
                 if row_idx == 0:
-                    ax.set_title(f"t{col_idx+1}", fontsize=8)
+                    ax.set_title(f"T{col_idx+1}", fontsize=10)
 
         # Add label for the row (band combination name)
         if col_idx == 0:
@@ -857,31 +868,100 @@ class Munich480_DataModule(DataModuleBase):
         
         
         # Crea una colormap personalizzata
-        color_list = [color for _, color in sorted(Munich480_DataModule.MAP_COLORS.items())]
-        cmap = ListedColormap(color_list)
+        # pred_color_list = [color for _, color in sorted(Munich480_DataModule.MAP_COLORS.items())]
+        # ignoreValue = len(pred_color_list)
+        # ignoreColor = "#F0F0F0"
+        # pred_color_list.append(ignoreColor)  # Colore grigino per "Ignored"
+        # pred_cmap = ListedColormap(pred_color_list)
+
+        # # Crea una colormap originale per la label map senza modifiche
+        # label_color_list = [color for _, color in sorted(Munich480_DataModule.MAP_COLORS.items())]
+        # label_cmap = ListedColormap(label_color_list)
+        
+        #color_list = [color for _, color in sorted(Munich480_DataModule.MAP_COLORS.items())]
+        
+        num_classes = Munich480_DataModule.ClassesCount
+        color_list = []
+        
+        for cls in range(num_classes):
+            color_list.append(Munich480_DataModule.MAP_COLORS[cls])
+        ignoreValue = len(color_list)
+        ignoreColor = "#E7E7E7"
+        
+        color_list.append(ignoreColor)
+        full_cmap = ListedColormap(color_list)
+        
+        print(full_cmap.colors)
+        
+        
+    
+        
         
         label_map = y.numpy()         # Etichetta per l'immagine corrente
         pred_map = y_hat.numpy()      # Predizione con massimo di ciascun layer di `y_hat`
         
-        fig2, axes2 = plt.subplots(1, 2, figsize=(10, 5))
+        fig2, axes2 = plt.subplots(1, 3 + (num_classes - 1), figsize=(18 + (num_classes - 1) * 2, 8))
+        #fig2, axes2 = plt.subplots(1, 3, figsize=(18 + (num_classes - 1) * 6, 8))
+        #fig2, axes2 = plt.subplots(1, 3, figsize=(10, 5))
         fig2.suptitle("Label Map and Prediction Map")
         
-            # Mappa etichetta `y`
-        axes2[0].imshow(label_map, cmap=cmap)
-        axes2[0].set_title("Label Map")
+        # Aggiungi legenda accanto alla seconda figura
+        legend_patches = [
+            mpatches.Patch(color=Munich480_DataModule.MAP_COLORS[cls], label=f'{cls} - {label}') 
+            for cls, label in self._classesMapping.items()
+        ]
+        
+        if IgnoreUnknow:
+            legend_patches.append(mpatches.Patch(color=ignoreColor, label="Ignored"))
+        
+        fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper left', title="Class Colors")
+        
+        axes2[0].imshow(sample, interpolation='None')
+        axes2[0].set_title("RGB Image")
         axes2[0].axis('off')
         
-        # Mappa predizione `y_hat`
-        axes2[1].imshow(pred_map, cmap=cmap)
-        axes2[1].set_title("Prediction Map")
+        # Mappa etichetta `y`
+        axes2[1].imshow(label_map, cmap=full_cmap, vmin=0, vmax=len(color_list))
+        axes2[1]
+        axes2[1].set_title("Ground truth")
         axes2[1].axis('off')
         
-        # Aggiungi legenda accanto alla seconda figura
-        legend_patches = [mpatches.Patch(color=Munich480_DataModule.MAP_COLORS[cls], label=f'{cls} - {label}') for cls, label in self._classesMapping.items()]
-        fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper right', title="Class Colors")
+        if IgnoreUnknow:
+            
+            pred_map_ignored = np.where(label_map == 0, ignoreValue, pred_map)
+            
+            # Mappa predizione `y_hat`
+            axes2[2].imshow(pred_map_ignored, cmap=full_cmap, vmin=0, vmax=len(color_list))
+            axes2[2].set_title("Prediction Map")
+            axes2[2].axis('off')
+        
+        else:
+            # Mappa predizione `y_hat`
+            axes2[2].imshow(pred_map, cmap=full_cmap, vmin=0, vmax=len(color_list))
+            axes2[2].set_title("Prediction Map")
+            axes2[2].axis('off')
+        
+        # Grafici di attivazione per ogni classe
+        if classes_probability is not None:
+            for cls in range(1, num_classes):  # Salta la classe 0
+                activation_map = classes_probability[cls]
+                im = axes2[2 + cls].imshow(activation_map, cmap="inferno", interpolation='none', vmin=0, vmax=1)
+                axes2[2 + cls].set_title(f"Activation Class {cls}")
+                axes2[2 + cls].axis('off')
 
-        fig1.subplots_adjust(right=0.8)
-        fig2.subplots_adjust(right=0.7)
+            # Aggiungi un grafico separato per l'ultima classe e la sua colorbar
+            activation_map_last = classes_probability[num_classes - 1]
+            im_last = axes2[2 + num_classes - 1].imshow(activation_map_last, cmap="inferno", interpolation='none', vmin=0, vmax=1)
+            axes2[2 + num_classes - 1].set_title(f"Activation Class {num_classes - 1}")
+            axes2[2 + num_classes - 1].axis('off')
+            
+            # Aggiungi la colorbar solo per l'ultimo grafico
+            fig2.colorbar(im_last, ax=axes2[2 + num_classes - 1], orientation='vertical', label='Activation')
+        
+       
+
+      
+        fig2.subplots_adjust(right=0.7,wspace=0.1, hspace=0.1)
         
         #fig1.tight_layout(pad=2.0)
         plt.tight_layout(pad=2.0, rect=[0, 0, 0, 0])
