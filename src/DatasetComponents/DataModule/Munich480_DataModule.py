@@ -644,7 +644,6 @@ class Munich480_DataModule(DataModuleBase):
             
             probabilitis = y_hat.detach().clone().detach()
             probabilitis= probabilitis.cpu().squeeze(0)
-            
             probabilitis = torch.softmax(probabilitis,dim=0).numpy()
             
             y_hat_ = torch.argmax(y_hat, dim=1)
@@ -678,7 +677,7 @@ class Munich480_DataModule(DataModuleBase):
             
             confMatrix.reset()
         
-            self.show_processed_sample(x=x, y_hat=y_hat_, y=y_, classes_probability=None, confusionMatrixData=graphData)
+            self.show_processed_sample(x=x, y_hat=y_hat_, y=y_, classes_probability=probabilitis, confusionMatrixData=graphData)
         
     
     def adjust_gamma(self, image, gamma=1.0):
@@ -900,8 +899,8 @@ class Munich480_DataModule(DataModuleBase):
         label_map = y.numpy()         # Etichetta per l'immagine corrente
         pred_map = y_hat.numpy()      # Predizione con massimo di ciascun layer di `y_hat`
         
-        fig2, axes2 = plt.subplots(1, 3 + (num_classes - 1), figsize=(18 + (num_classes - 1) * 2, 8))
-        #fig2, axes2 = plt.subplots(1, 3, figsize=(18 + (num_classes - 1) * 6, 8))
+        #fig2, axes2 = plt.subplots(1, 3 + (num_classes - 1), figsize=(18 + (num_classes - 1) * 2, 8))
+        fig2, axes2 = plt.subplots(1, 3, figsize=(14, 8))
         #fig2, axes2 = plt.subplots(1, 3, figsize=(10, 5))
         fig2.suptitle("Label Map and Prediction Map")
         
@@ -914,7 +913,7 @@ class Munich480_DataModule(DataModuleBase):
         if IgnoreUnknow:
             legend_patches.append(mpatches.Patch(color=ignoreColor, label="Ignored"))
         
-        fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper left', title="Class Colors")
+        fig2.legend(handles=legend_patches, bbox_to_anchor=(1, 1), loc='upper right', title="Class Colors")
         
         axes2[0].imshow(sample, interpolation='None')
         axes2[0].set_title("RGB Image")
@@ -941,23 +940,40 @@ class Munich480_DataModule(DataModuleBase):
             axes2[2].set_title("Prediction Map")
             axes2[2].axis('off')
         
-        # Grafici di attivazione per ogni classe
         if classes_probability is not None:
-            for cls in range(1, num_classes):  # Salta la classe 0
-                activation_map = classes_probability[cls]
-                im = axes2[2 + cls].imshow(activation_map, cmap="inferno", interpolation='none', vmin=0, vmax=1)
-                axes2[2 + cls].set_title(f"Activation Class {cls}")
-                axes2[2 + cls].axis('off')
+            # Filtra le classi effettivamente presenti nel dizionario
+            valid_classes = [cls for cls in range(1,num_classes) if cls in self._classesMapping]
 
-            # Aggiungi un grafico separato per l'ultima classe e la sua colorbar
-            activation_map_last = classes_probability[num_classes - 1]
-            im_last = axes2[2 + num_classes - 1].imshow(activation_map_last, cmap="inferno", interpolation='none', vmin=0, vmax=1)
-            axes2[2 + num_classes - 1].set_title(f"Activation Class {num_classes - 1}")
-            axes2[2 + num_classes - 1].axis('off')
+            # Se non ci sono classi valide, non fare nulla
+            if len(valid_classes) == 0:
+                print("Nessuna classe valida per visualizzare le mappe di attivazione.")
+                return
+
+            # Numero di righe e colonne per disporre in 9 elementi per riga
+            cols = 7  # 9 colonne per riga
+            rows = (len(valid_classes) + cols - 1) // cols  # Calcola il numero di righe
+
+            fig3, axes3 = plt.subplots(rows, cols, figsize=(cols * 4, rows * 5))  # Aumenta la dimensione per ogni grafico
+
+            # Se c'è solo una riga o colonna, trasforma l'array di assi per una facile gestione
+            if rows == 1:
+                axes3 = axes3.reshape(1, -1)
+            if cols == 1:
+                axes3 = axes3.reshape(-1, 1)
+
+            # Grafici di attivazione per ogni classe
+            for i, cls in enumerate(valid_classes):
+                activation_map = classes_probability[cls]
+                class_name = self._classesMapping.get(cls, f"Class {cls}")  # Ottieni il nome della classe
+                ax = axes3[i // cols, i % cols]  # Posizionamento nell'array 2D di assi
+                im = ax.imshow(activation_map, cmap="inferno", interpolation='none', vmin=0, vmax=1)
+                ax.set_title(f"Activation - {class_name}")  # Usa il nome della classe
+                ax.axis('off')
+
+                # Aggiungi la colorbar per ogni grafico
+                fig3.colorbar(im, ax=ax, orientation='vertical', label='Activation', shrink=0.60)
+
             
-            # Aggiungi la colorbar solo per l'ultimo grafico
-            fig2.colorbar(im_last, ax=axes2[2 + num_classes - 1], orientation='vertical', label='Activation')
-        
        
 
       
