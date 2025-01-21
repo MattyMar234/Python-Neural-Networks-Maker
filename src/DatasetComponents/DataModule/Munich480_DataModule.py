@@ -64,6 +64,7 @@ def _generate_distinct_colors(num_classes: int) -> Dict[int, str]:
         colors[i] = hex_color
         
     colors[0] = '#333333'
+    colors[27] = '#E7E7E7'
     
     return colors
 
@@ -475,36 +476,36 @@ class Munich480_DataModule(DataModuleBase):
             creator_x:TIF_Creator = TIF_Creator('/app/geoData/x')
             creator_x_v2:TIF_Creator = TIF_Creator('/app/geoData/x_v2')
             creator_y:TIF_Creator = TIF_Creator('/app/geoData/y')
-            creator_y_hat:TIF_Creator = TIF_Creator('/app/geoData/y_hat')
+            creator_y_hat:TIF_Creator = TIF_Creator('/app/geoData/y_hat_v2')
             #loaders = [temp_loader1, temp_loader2, temp_loader3]
             loaders = [temp_loader1]
             
-            number = 240
+            # number = 240
             
-            for i in range(len(temp_loader1)):
-                print(f"Processing {i}/{number}", end = '\r')
+            # for i in range(len(temp_loader1)):
+            #     print(f"Processing {i}/{number}", end = '\r')
                 
-                try:
-                    output = temp_loader1.dataset.get_dataset_image(i,"20160212")
-                    image = output["data"]
-                    profile = output["profile"]
+            #     try:
+            #         output = temp_loader1.dataset.get_dataset_image(i,"20160212")
+            #         image = output["data"]
+            #         profile = output["profile"]
                     
-                    red = image[BandeIndex.BAND_4_RED.value, :, :]
-                    green = image[BandeIndex.BAND_3_GREEN.value, :, :]
-                    blue = image[BandeIndex.BAND_2_BLUE.value, :, :]
+            #         red = image[BandeIndex.BAND_4_RED.value, :, :]
+            #         green = image[BandeIndex.BAND_3_GREEN.value, :, :]
+            #         blue = image[BandeIndex.BAND_2_BLUE.value, :, :]
 
-                    rgb_image = np.stack([red, green, blue])
-                    rgb_image = ((rgb_image * (2**16 - 1)))
-                    #rgb_image = rgb_image.permute(1, 2, 0)
-                    rgb_image_np = self.adjust_RGB_image(rgb_image)
+            #         rgb_image = np.stack([red, green, blue])
+            #         rgb_image = ((rgb_image * (2**16 - 1)))
+            #         #rgb_image = rgb_image.permute(1, 2, 0)
+            #         rgb_image_np = self.adjust_RGB_image(rgb_image)
                     
-                    creator_x_v2.makeTIF(f'{i}.tif', profile, data =rgb_image_np, channels = 3, width=48, height=48)
-                except Exception as e:
-                    print(e)
-                    pass 
-            print("start merging x_v2...")
-            creator_x_v2.mergeTIFs('/app/merged_x_v2.tif')
-            return
+            #         creator_x_v2.makeTIF(f'{i}.tif', profile, data =rgb_image_np, channels = 3, width=48, height=48)
+            #     except Exception as e:
+            #         print(e)
+            #         pass 
+            # print("start merging x_v2...")
+            # creator_x_v2.mergeTIFs('/app/merged_x_v2.tif')
+            # return
             
             # creator_y_hat.mergeTIFs('/app/merged_y_hat.tif')
             # creator_y.mergeTIFs('/app/merged_y.tif')
@@ -520,63 +521,66 @@ class Munich480_DataModule(DataModuleBase):
                 for n, (x, y) in enumerate(loader):
                     print(f"Processing {step}/{size} | [{k}-{n}]", end = '\r')
                     with torch.no_grad():
-                        #profile = loader.dataset.getItemInfo(n)
-                        #print(x.shape)
-                        #image = x[0, :, T, :, :]
+                        profile = loader.dataset.getItemInfo(n)
+                        # print(x.shape)
+                        # image = x[0, :, T, :, :]
                         
-                        output = loader.dataset.get_dataset_image(n,"20160212")
+                        # output = loader.dataset.get_dataset_image(n,"20160212")
                         
-                        image = output["data"]
-                        profile = output["profile"]
+                        # image = output["data"]
+                        # profile = output["profile"]
                         
-                        #print(image.shape)
+                        # #print(image.shape)
                         
-                        #print(image.shape)
-                        red = image[BandeIndex.BAND_4_RED.value, :, :]
-                        green = image[BandeIndex.BAND_3_GREEN.value, :, :]
-                        blue = image[BandeIndex.BAND_2_BLUE.value, :, :]
+                        # #print(image.shape)
+                        # red = image[BandeIndex.BAND_4_RED.value, :, :]
+                        # green = image[BandeIndex.BAND_3_GREEN.value, :, :]
+                        # blue = image[BandeIndex.BAND_2_BLUE.value, :, :]
 
-                        #print(red.shape, green.shape, blue.shape)
+                        # #print(red.shape, green.shape, blue.shape)
 
-                        rgb_image = np.stack([red, green, blue])
-                        rgb_image = ((rgb_image * (2**16 - 1)))
-                        #rgb_image = rgb_image.permute(1, 2, 0)
-                        rgb_image_np = self.adjust_RGB_image(rgb_image)
+                        # rgb_image = np.stack([red, green, blue])
+                        # rgb_image = ((rgb_image * (2**16 - 1)))
+                        # #rgb_image = rgb_image.permute(1, 2, 0)
+                        # rgb_image_np = self.adjust_RGB_image(rgb_image)
                         
                         
 
-                        # x = x.to(device)
-                        # y_hat = model(x)
+                        x = x.to(device)
+                        y_hat = model(x)
 
-                        # y_hat_ = torch.argmax(y_hat, dim=1)
-                        # y_ = torch.argmax(y, dim=1)
-
-
-                        # #profile = self._TEST.getItemInfo(n)
-                        # y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
-                        # y_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                        y_hat_ = torch.argmax(y_hat, dim=1)
+                        y_hat_ = y_hat_.cpu()
+                        y_ = torch.argmax(y, dim=1)
                         
-                        # for i in range(48):
-                        #     for j in range(48):
-                        #         class_id = int(y_hat_[0, i, j])
-                        #         y_hat_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+                        y_hat_ = np.where(y_ == 0, 27, y_hat_)
 
-                        #         class_id = int(y_[0, i, j])
-                        #         y_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
 
-                    creator_x.makeTIF(f'{step}.tif', profile, data =rgb_image_np, channels = 3, width=48, height=48)
-                    #creator_y_hat.makeTIF(f'{step}.tif', profile, data =y_hat_RGB, channels = 3, width=48, height=48) 
+                        #profile = self._TEST.getItemInfo(n)
+                        y_hat_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                        y_RGB = np.zeros((3, 48, 48), dtype=np.uint8)
+                        
+                        for i in range(48):
+                            for j in range(48):
+                                class_id = int(y_hat_[0, i, j])
+                                y_hat_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                                class_id = int(y_[0, i, j])
+                                y_RGB[:, i, j] = self.MAP_COLORS_AS_RGB_LIST[class_id]
+
+                    #creator_x.makeTIF(f'{step}.tif', profile, data =rgb_image_np, channels = 3, width=48, height=48)
+                    creator_y_hat.makeTIF(f'{step}.tif', profile, data =y_hat_RGB, channels = 3, width=48, height=48) 
                     #creator_y.makeTIF(f'{step}.tif', profile, data =y_RGB, channels = 3, width=48, height=48)
-                
+                    
                     step += 1
                     
-                    if count >= 0 and step >= count:
-                        break
+                    # if count >= 0 and step >= count:
+                    #     break
         
-            print("start merging x...")
-            creator_x.mergeTIFs('/app/merged_x.tif')
-            # print("start merging y_hat...")
-            # creator_y_hat.mergeTIFs('/app/merged_y_hat.tif')
+            #print("start merging x...")
+            #creator_x.mergeTIFs('/app/merged_x.tif')
+            print("\nstart merging y_hat...")
+            creator_y_hat.mergeTIFs('/app/merged_y_hat_v2.tif')
             # creator_y.mergeTIFs('/app/merged_y.tif')
    
     def noIgnore(self, model, device, **kwargs):
