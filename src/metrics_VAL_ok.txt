@@ -1,0 +1,133 @@
+Per-Class Metrics:
+Class 0 - unknown:
+  Pixel Count: 0
+  Avg Precision: 0.0000
+  Avg Recall: 0.0000
+  Avg F1-Score: 0.0000
+  Avg Kappa: 0.0000
+
+Class 1 - sugar beet:
+  Pixel Count: 38619
+  Avg Precision: 0.8679
+  Avg Recall: 0.9122
+  Avg F1-Score: 0.8761
+  Avg Kappa: 0.8632
+
+Class 2 - summer oat:
+  Pixel Count: 26912
+  Avg Precision: 0.7120
+  Avg Recall: 0.7525
+  Avg F1-Score: 0.6985
+  Avg Kappa: 0.6809
+
+Class 3 - meadow:
+  Pixel Count: 148069
+  Avg Precision: 0.7803
+  Avg Recall: 0.7746
+  Avg F1-Score: 0.7494
+  Avg Kappa: nan
+
+Class 5 - rape:
+  Pixel Count: 82765
+  Avg Precision: 0.8989
+  Avg Recall: 0.9356
+  Avg F1-Score: 0.9116
+  Avg Kappa: nan
+
+Class 8 - hop:
+  Pixel Count: 31769
+  Avg Precision: 0.8714
+  Avg Recall: 0.9229
+  Avg F1-Score: 0.8879
+  Avg Kappa: 0.8311
+
+Class 9 - winter spelt:
+  Pixel Count: 24178
+  Avg Precision: 0.6868
+  Avg Recall: 0.6073
+  Avg F1-Score: 0.6087
+  Avg Kappa: nan
+
+Class 12 - winter triticale:
+  Pixel Count: 38488
+  Avg Precision: 0.6518
+  Avg Recall: 0.5271
+  Avg F1-Score: 0.5346
+  Avg Kappa: 0.5050
+
+Class 13 - beans:
+  Pixel Count: 18329
+  Avg Precision: 0.7646
+  Avg Recall: 0.8626
+  Avg F1-Score: 0.7955
+  Avg Kappa: nan
+
+Class 15 - peas:
+  Pixel Count: 5849
+  Avg Precision: 0.7722
+  Avg Recall: 0.7538
+  Avg F1-Score: 0.7426
+  Avg Kappa: 0.7329
+
+Class 16 - potatoe:
+  Pixel Count: 78113
+  Avg Precision: 0.8504
+  Avg Recall: 0.8593
+  Avg F1-Score: 0.8397
+  Avg Kappa: nan
+
+Class 17 - soybeans:
+  Pixel Count: 12651
+  Avg Precision: 0.8177
+  Avg Recall: 0.8628
+  Avg F1-Score: 0.8190
+  Avg Kappa: nan
+
+Class 19 - asparagus:
+  Pixel Count: 13867
+  Avg Precision: 0.8392
+  Avg Recall: 0.7899
+  Avg F1-Score: 0.7734
+  Avg Kappa: 0.7539
+
+Class 22 - winter wheat:
+  Pixel Count: 511723
+  Avg Precision: 0.9186
+  Avg Recall: 0.8485
+  Avg F1-Score: 0.8667
+  Avg Kappa: nan
+
+Class 23 - winter barley:
+  Pixel Count: 164461
+  Avg Precision: 0.8572
+  Avg Recall: 0.8505
+  Avg F1-Score: 0.8409
+  Avg Kappa: nan
+
+Class 24 - winter rye:
+  Pixel Count: 27726
+  Avg Precision: 0.6683
+  Avg Recall: 0.5712
+  Avg F1-Score: 0.5693
+  Avg Kappa: 0.5329
+
+Class 25 - summer barley:
+  Pixel Count: 45676
+  Avg Precision: 0.8120
+  Avg Recall: 0.8180
+  Avg F1-Score: 0.7979
+  Avg Kappa: 0.7834
+
+Class 26 - maize:
+  Pixel Count: 572956
+  Avg Precision: 0.9568
+  Avg Recall: 0.9014
+  Avg F1-Score: 0.9220
+  Avg Kappa: nan
+
+Global Metrics:
+  Weighted Avg Precision: 0.8869
+  Weighted Avg Recall: 0.8495
+  Weighted Avg F1-Score: 0.8525
+  Overall Accuracy: 0.9139
+  Overall Kappa: 0.8939

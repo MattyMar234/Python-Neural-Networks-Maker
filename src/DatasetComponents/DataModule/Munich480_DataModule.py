@@ -403,37 +403,7 @@ class Munich480_DataModule(DataModuleBase):
         
         # return
         
-        # table: TableBase = TensorTable("munich")
         
-        # databaseParametre = DatabaseParametre(
-        #     host="192.168.1.202",#"host.docker.internal",
-        #     port="44500",
-        #     database="NAS1",
-        #     user="postgres",
-        #     password="admin",
-        #     maxconn  = 10,
-        #     timeout  = 10
-        # )
-        
-        
-        # remoteConnection: PostgresDataset_Interface = PostgresDataset_Interface(databaseParametre)
-        # DB: PostgresDB = remoteConnection.getStream()
-        # DB.execute_query(table.createTable_Query())
-        
-        # idx = 0
-        
-        # data: Dict[str, any] = self._TEST.getItems(idx)  
-        # x = data['x']
-        # y = data['y']  
-        # profile = data['profile']  
-        
-        
-        # tensor_binary_x = Binary(pickle.dumps(x))     
-        # tensor_binary_y = Binary(pickle.dumps(y))
-        # profile_binary = Binary(pickle.dumps(profile))
-        # #DB.execute_query(table.insertElement_Query(id = idx, x = tensor_binary_x, y = tensor_binary_y, info = profile_binary))
-        # q = table.getElementAt_Query(0)
-        # print(q)
         
         idx = kwargs["idx"]
 
@@ -442,6 +412,10 @@ class Munich480_DataModule(DataModuleBase):
             self.with_ignore(model, device, **kwargs)
         
         if idx == -1:
+            
+            self.make_metrics(model, device, **kwargs)
+            return
+            
             
             temp_loader1 = DataLoader(
                 self._TEST,  # Assuming self._TRAIN is a Dataset object
@@ -583,6 +557,191 @@ class Munich480_DataModule(DataModuleBase):
             creator_y_hat.mergeTIFs('/app/merged_y_hat_v2.tif')
             # creator_y.mergeTIFs('/app/merged_y.tif')
    
+    
+    def make_metrics(self, model: ModelBase, device: torch.device, **kwarg):
+        
+        from sklearn.metrics import precision_score, recall_score, f1_score, cohen_kappa_score, confusion_matrix
+        
+    
+        
+        loader1 = DataLoader(
+                self._TEST,  # Assuming self._TRAIN is a Dataset object
+                batch_size=1,  # Set batch_size=1 for individual sample processing
+                num_workers=kwarg["workers"],
+                shuffle=False,
+                persistent_workers=False,
+                pin_memory=True,
+                prefetch_factor=None
+            )
+        
+        loader2 = DataLoader(
+                self._VAL,  # Assuming self._TRAIN is a Dataset object
+                batch_size=1,  # Set batch_size=1 for individual sample processing
+                num_workers=kwarg["workers"],
+                shuffle=False,
+                persistent_workers=False,
+                pin_memory=True,
+                prefetch_factor=None
+            )
+        
+        loaderName = {
+            "TEST" :  loader1,
+            "VAL" : loader2
+        }
+        
+        for k in loaderName.keys():
+            loader = loaderName[k]
+            
+            total_pixels = 0
+            total_correct_predictions = 0
+            kappa_all_classes = []
+
+            # Per il calcolo della media ponderata
+            weighted_precision_sum = 0
+            weighted_recall_sum = 0
+            weighted_f1_sum = 0
+            
+            all_y_flat = []
+            all_y_pred_flat = []
+            metrics = {}
+        
+            for cls in self._classesMapping.keys():
+                metrics[cls] = {
+                    "pixel_count" : 0,
+                    "correct_predictions" : 0,
+                    "f1_scores" : [],
+                    "recalls" : [],
+                    "precisions" : [],
+                    "kappas" : []
+                }
+        
+            for n, (x, y) in enumerate(loader):
+                print(f"{k}-Processing {n}/{len(loader)}", end='\r')
+                
+                with torch.no_grad():
+                    x = x.to(device)
+                    y = y.to(device)
+
+                # Genera la previsione
+                y_hat = model(x)
+                y_pred = torch.argmax(y_hat, dim=1)  # [batch_size, H, W]
+                y_classes = torch.argmax(y, dim=1)
+                
+                # Rendi y e y_pred compatibili con le metriche (flatten per batch)
+                y_flat = y_classes.view(-1).cpu().numpy()        # [N_pixels]
+                y_pred_flat = y_pred.view(-1).cpu().numpy()  # [N_pixels]
+                
+                # Applica una maschera per ignorare le aree in cui la verità è 0
+                valid_mask = (y_flat != 0)  # True per pixel dove la verità non è 0
+                y_flat = y_flat[valid_mask]  # Filtra y_flat
+                y_pred_flat = y_pred_flat[valid_mask]  # Filtra y_pred_flat
+                
+                if y_flat.size == 0 or y_pred_flat.size == 0:
+                    continue  # Salta se nessun pixel è valido
+                
+                all_y_flat.extend(y_flat)
+                all_y_pred_flat.extend(y_pred_flat)
+
+                # Determina le classi presenti nel batch
+                unique_classes = np.unique(y_flat)      
+            
+                for cls in unique_classes:
+                    if cls == 0:
+                        continue  # Ignora la classe 0
+                    
+                    # Crea maschere binarie per la classe corrente
+                    y_bin = (y_flat == cls).astype(int)
+                    y_pred_bin = (y_pred_flat == cls).astype(int)
+                    
+                    # Calcola Precision, Recall e F1-Score
+                    precision = precision_score(y_bin, y_pred_bin, zero_division=0)
+                    recall = recall_score(y_bin, y_pred_bin, zero_division=0)
+                    f1 = f1_score(y_bin, y_pred_bin, zero_division=0)
+                    
+                    if np.all(y_bin == 0) or np.all(y_pred_bin == 0):
+                        kappa = 0.0
+                    else:
+                        if len(np.unique(y_bin)) == 1 or len(np.unique(y_pred_bin)) == 1:
+                            kappa = 0.0  # Se c'è solo una classe presente, mettiamo Kappa a 0
+                        else:
+                            kappa = cohen_kappa_score(y_bin, y_pred_bin)
+
+                            
+                    total_correct_predictions += np.sum(y_bin * y_pred_bin)
+                    #total_pixels += y_bin.sum()
+                    
+                    metrics[cls]["pixel_count"] += y_bin.sum()
+                    metrics[cls]["f1_scores"].append(f1)
+                    metrics[cls]["recalls"].append(recall)
+                    metrics[cls]["precisions"].append(precision)
+                    metrics[cls]["kappas"].append(kappa)
+
+                
+            
+            # Calcolo delle metriche mediate per ogni classe
+            final_metrics = {}
+            for cls in metrics.keys():
+                if metrics[cls]["pixel_count"] > 0 and cls != 0:  # Considera solo le classi presenti
+                    final_metrics[cls] = {
+                        "avg_precision": np.mean(metrics[cls]["precisions"]),
+                        "avg_recall": np.mean(metrics[cls]["recalls"]),
+                        "avg_f1": np.mean(metrics[cls]["f1_scores"]),
+                        "avg_kappa": np.mean(metrics[cls]["kappas"]),
+                        "pixel_count": metrics[cls]["pixel_count"]
+                    }
+                else:
+                    final_metrics[cls] = {
+                        "avg_precision": 0.0,
+                        "avg_recall": 0.0,
+                        "avg_f1": 0.0,
+                        "avg_kappa": 0.0,
+                        "pixel_count": 0
+                    }
+    
+            
+
+            # Iterazione sulle classi per il calcolo del peso e della somma pesata
+            for cls, metric in final_metrics.items():
+                if metric["pixel_count"] > 0 and cls != 0:
+                    pixel_count = metric["pixel_count"]
+                    total_pixels +=  pixel_count # Totale pixel per tutte le classi
+
+                    weighted_precision_sum += metric["avg_precision"] * pixel_count
+                    weighted_recall_sum += metric["avg_recall"] * pixel_count
+                    weighted_f1_sum += metric["avg_f1"] * pixel_count
+                    kappa_all_classes.append(metric["avg_kappa"])
+        
+        
+            # Calcolo delle metriche globali
+            overall_accuracy = total_correct_predictions / total_pixels if total_pixels > 0 else 0
+            weighted_avg_precision = weighted_precision_sum / total_pixels if total_pixels > 0 else 0
+            weighted_avg_recall = weighted_recall_sum / total_pixels if total_pixels > 0 else 0
+            weighted_avg_f1 = weighted_f1_sum / total_pixels if total_pixels > 0 else 0
+
+            # Calcolo di Overall Kappa considerando tutte le classi insieme
+            overall_kappa = cohen_kappa_score(np.array(all_y_flat), np.array(all_y_pred_flat))
+            print()
+            
+            print(f"metrics-{k}.txt")
+            with open(f"metrics_{k}.txt", mode='w') as f:
+                f.write("Per-Class Metrics:\n")
+                for cls, metric in final_metrics.items():
+                    f.write(f"Class {cls} - {self._classesMapping[cls]}:\n")
+                    f.write(f"  Pixel Count: {metric['pixel_count']}\n")
+                    f.write(f"  Avg Precision: {metric['avg_precision']:.4f}\n")
+                    f.write(f"  Avg Recall: {metric['avg_recall']:.4f}\n")
+                    f.write(f"  Avg F1-Score: {metric['avg_f1']:.4f}\n")
+                    f.write(f"  Avg Kappa: {metric['avg_kappa']:.4f}\n")
+                    f.write("\n")
+
+                # Scrivi le metriche globali
+                f.write("Global Metrics:\n")
+                f.write(f"  Weighted Avg Precision: {weighted_avg_precision:.4f}\n")
+                f.write(f"  Weighted Avg Recall: {weighted_avg_recall:.4f}\n")
+                f.write(f"  Weighted Avg F1-Score: {weighted_avg_f1:.4f}\n")
+                f.write(f"  Overall Accuracy: {overall_accuracy:.4f}\n")
+                f.write(f"  Overall Kappa: {overall_kappa:.4f}\n")
+                       
     def noIgnore(self, model, device, **kwargs):
         confMatrix: ConfusionMatrix  = ConfusionMatrix(classes_number = 27, ignore_class=self.classesToIgnore(), mapFuntion=self.map_classes)
     
