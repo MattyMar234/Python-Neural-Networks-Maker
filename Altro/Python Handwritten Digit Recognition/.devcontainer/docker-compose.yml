@@ -1,0 +1,44 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  dev:
+    image: mcr.microsoft.com/devcontainers/python:3.12  # Immagine del Dev Container
+    build:
+      context: .
+      dockerfile: Dockerfile  # Specifica un Dockerfile, se ne hai uno
+    volumes:
+      - .:/app  # Monta la directory di lavoro locale nel container
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}       # Variabili d'ambiente per la connessione
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    networks:
+      - devnetwork
+    ports:
+      - 8080:8080   # Eventuali porte da esporre, facoltativo
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - devnetwork
+    ports:
+      - "5432:5432"
+
+networks:
+  devnetwork:
+
+volumes:
+  pgdata:

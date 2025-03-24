@@ -1,0 +1,49 @@
+{
+    "name": "Python Handwriten Digit Recognition",
+    "image": "mcr.microsoft.com/devcontainers/python:3.12",
+
+    //utilizzo image oppure un docker file
+    // "build": {
+    //   "dockerfile": "Dockerfile"
+    // },
+    // "settings": {
+    //   "terminal.integrated.shell.linux": "/bin/bash"
+    // },
+
+    // "dockerComposeFile": ["../docker-compose.yml"],
+    // "service": "dev",  // Nome del servizio Dev nel docker-compose.yml
+    "workspaceFolder": "/app",
+    "runArgs": ["--gpus", "all", "--shm-size=1g"],
+    "postCreateCommand": "pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt",
+    
+
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/app,type=bind"
+
+    ],
+
+    // "remoteEnv": {
+    //     "POSTGRES_USER": "${localEnv:POSTGRES_USER}",
+    //     "POSTGRES_PASSWORD": "${localEnv:POSTGRES_PASSWORD}",
+    //     "POSTGRES_DB": "${localEnv:POSTGRES_DB}"
+    // },
+
+    "customizations" : {
+
+        // Configure properties specific to VS Code.
+        "vscode" : {
+            "settings": {},
+            "extensions" : [
+                //"streetsidesoftware.code-spell-checker",
+                "ms-python.isort",
+                "njqdev.vscode-python-typehint",
+                "kaih2o.python-resource-monitor",
+                "kevinrose.vsc-python-indent",
+                "ms-ossdata.vscode-postgresql",  // Estensione per interagire con PostgreSQL
+                "tabnine.tabnine-vscode",
+                "amazonwebservices.amazon-q-vscode",
+                "amazonwebservices.aws-toolkit-vscode"
+            ]
+        }
+    }
+  }
